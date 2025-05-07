@@ -30,14 +30,38 @@ This project implements a web application that enables voice conversations with 
 
 2. Click "Continue" after configuring.
 
-3. Click "Start Conversation" to begin interacting with the AI voice agent.
+3. Click "Start Interview" to begin interacting with the AI voice agent.
    - The app will request microphone permission.
    - When the connection is established, you can speak with the AI.
 
-4. Click "Stop Conversation" when you're done.
+4. Click "End Interview" when you're done.
+
+## Testing the Transcript Feature
+
+The application includes a transcript feature that captures and displays all conversation messages. To verify it's working correctly:
+
+1. Open your browser's developer console (F12 or right-click > Inspect > Console)
+2. Look for console logs showing transcript activity
+3. Use the built-in debug helpers to test transcript functionality:
+   ```javascript
+   // Add a test transcript message
+   window.debugTranscripts.testTranscript()
+   
+   // Check the transcript API data
+   window.debugTranscripts.checkAPI()
+   
+   // Get the current session ID
+   window.debugTranscripts.logSessionId()
+   
+   // Get all current transcripts
+   window.debugTranscripts.getTranscripts()
+   ```
+
+4. Check the transcript display in the UI - after adding test messages, they should appear in the transcript section
 
 ## Notes
 
 - The conversation requires microphone permissions.
 - For private agents, you'll need to use the signed URL approach.
-- You can create an ElevenLabs agent by following their [quickstart guide](https://elevenlabs.io/docs/conversational-ai/quickstart). 
+- You can create an ElevenLabs agent by following their [quickstart guide](https://elevenlabs.io/docs/conversational-ai/quickstart).
+- Transcript data is stored temporarily in memory - for production, implement a database solution. 

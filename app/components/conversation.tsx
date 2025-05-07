@@ -10,13 +10,51 @@ export function Conversation() {
 
   // Generate a session ID when the component mounts
   useEffect(() => {
-    setSessionId(`session-${Date.now()}`);
+    const newSessionId = `session-${Date.now()}`;
+    console.log('Generated session ID:', newSessionId);
+    setSessionId(newSessionId);
+    
+    // Add debug helper to window object
+    if (typeof window !== 'undefined') {
+      (window as any).debugTranscripts = {
+        getTranscripts: () => transcripts,
+        testTranscript: async () => {
+          console.log('Adding test transcript...');
+          const testData = {
+            role: 'interviewer',
+            content: 'This is a test message from the interviewer.'
+          };
+          setTranscripts(prev => [...prev, testData]);
+          await saveTranscript(testData.role, testData.content);
+          console.log('Test transcript added');
+          return 'Test transcript added';
+        },
+        checkAPI: async () => {
+          try {
+            const response = await fetch('/api/transcripts');
+            const data = await response.json();
+            console.log('API response:', data);
+            return data;
+          } catch (error) {
+            console.error('API check failed:', error);
+            return 'API check failed';
+          }
+        },
+        logSessionId: () => {
+          console.log('Current session ID:', sessionId);
+          return sessionId;
+        }
+      };
+      
+      console.log('Debug functions available. Run window.debugTranscripts.testTranscript() to test');
+    }
   }, []);
 
   // Function to save a message to the transcript API
   const saveTranscript = async (role: string, content: string) => {
+    console.log('Saving transcript:', { sessionId, role, content });
     try {
-      await fetch('/api/transcripts', {
+      const response = await fetch('/api/transcripts', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -27,16 +65,28 @@ export function Conversation() {
           content,
         }),
       });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Failed to save transcript. Status:', response.status, errorData);
+      } else {
+        const data = await response.json();
+        console.log('Transcript saved successfully:', data);
+      }
     } catch (error) {
       console.error('Failed to save transcript:', error);
     }
   };
 
   const conversation = useConversation({
-    onConnect: () => console.log('Connected'),
-    onDisconnect: () => console.log('Disconnected'),
+    onConnect: () => {
+      console.log('ElevenLabs voice agent connected');
+    },
+    onDisconnect: () => {
+      console.log('ElevenLabs voice agent disconnected');
+    },
     onMessage: (message) => {
-      console.log('Message:', message);
+      console.log('Raw message from ElevenLabs:', message);
       
       // Only process messages with content
       if (message && message.text) {
@@ -44,15 +94,21 @@ export function Conversation() {
         const role = message.from === 'agent' ? 'interviewer' : 'candidate';
         const content = message.text;
         
+        console.log(`Processing ${role} message:`, content);
+        
         // Add to local state for display
         const newTranscript = { role, content };
         setTranscripts(prev => [...prev, newTranscript]);
         
         // Send to API
         saveTranscript(role, content);
+      } else {
+        console.warn('Received message without text content:', message);
       }
     },
-    onError: (error) => console.error('Error:', error),
+    onError: (error) => {
+      console.error('ElevenLabs error:', error);
+    },
   });
 
   const getSignedUrl = async (): Promise<string> => {
@@ -77,9 +133,11 @@ export function Conversation() {
 
       // Start the conversation using the signed URL approach
       const signedUrl = await getSignedUrl();
+      console.log('Starting conversation with signedUrl');
       await conversation.startSession({
         signedUrl,
       });
+      console.log('Conversation session started successfully');
       
     } catch (error) {
       console.error('Failed to start conversation:', error);
@@ -89,7 +147,9 @@ export function Conversation() {
   }, [conversation]);
 
   const stopConversation = useCallback(async () => {
+    console.log('Ending conversation session');
     await conversation.endSession();
+    console.log('Conversation session ended');
   }, [conversation]);
 
   return (

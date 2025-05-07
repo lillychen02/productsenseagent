@@ -9,10 +9,15 @@ const transcripts: Array<{
 }> = [];
 
 export async function POST(request: Request) {
+  console.log('Transcript API called');
   try {
-    const { sessionId, role, content } = await request.json();
+    const body = await request.json();
+    console.log('Received transcript data:', body);
+    
+    const { sessionId, role, content } = body;
 
     if (!sessionId || !role || !content) {
+      console.error('Missing required fields in transcript data');
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
@@ -27,6 +32,7 @@ export async function POST(request: Request) {
 
     // Log for demonstration purposes
     console.log(`[Transcript] ${role}: ${content}`);
+    console.log(`Total transcripts: ${transcripts.length}`);
 
     return NextResponse.json({
       success: true,
@@ -43,5 +49,6 @@ export async function POST(request: Request) {
 
 // For development/debugging - get all transcripts
 export async function GET() {
+  console.log('GET /api/transcripts called. Current transcripts:', transcripts.length);
   return NextResponse.json({ transcripts });
 } 
