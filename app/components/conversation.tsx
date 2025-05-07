@@ -4,8 +4,7 @@ import { useConversation } from '@11labs/react';
 import { useCallback, useState } from 'react';
 
 export function Conversation() {
-  const [agentId, setAgentId] = useState<string>('');
-  const [isConfiguring, setIsConfiguring] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const conversation = useConversation({
     onConnect: () => console.log('Connected'),
@@ -30,73 +29,43 @@ export function Conversation() {
 
   const startConversation = useCallback(async () => {
     try {
+      setIsLoading(true);
       // Request microphone permission
       await navigator.mediaDevices.getUserMedia({ audio: true });
 
-      if (agentId) {
-        // Start the conversation with your agent ID directly
-        await conversation.startSession({
-          agentId: agentId,
-        });
-      } else {
-        // Or use a signed URL for private agents
-        const signedUrl = await getSignedUrl();
-        await conversation.startSession({
-          signedUrl,
-        });
-      }
-
+      // Start the conversation using the signed URL approach
+      const signedUrl = await getSignedUrl();
+      await conversation.startSession({
+        signedUrl,
+      });
+      
     } catch (error) {
       console.error('Failed to start conversation:', error);
+    } finally {
+      setIsLoading(false);
     }
-  }, [conversation, agentId]);
+  }, [conversation]);
 
   const stopConversation = useCallback(async () => {
     await conversation.endSession();
   }, [conversation]);
-
-  if (isConfiguring) {
-    return (
-      <div className="flex flex-col items-center gap-4 p-6 bg-white rounded-lg shadow-md">
-        <h2 className="text-xl font-semibold">Configure Your Agent</h2>
-        <div className="w-full">
-          <label className="block text-sm font-medium text-gray-700">
-            Agent ID (leave empty to use signed URL)
-          </label>
-          <input
-            type="text"
-            value={agentId}
-            onChange={(e) => setAgentId(e.target.value)}
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-            placeholder="Enter your ElevenLabs agent ID"
-          />
-        </div>
-        <button
-          onClick={() => setIsConfiguring(false)}
-          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-        >
-          Continue
-        </button>
-      </div>
-    );
-  }
 
   return (
     <div className="flex flex-col items-center gap-4 p-6 bg-white rounded-lg shadow-md">
       <div className="flex gap-2">
         <button
           onClick={startConversation}
-          disabled={conversation.status === 'connected'}
+          disabled={conversation.status === 'connected' || isLoading}
           className="px-4 py-2 bg-blue-500 text-white rounded disabled:bg-gray-300 hover:bg-blue-600 transition-colors"
         >
-          Start Conversation
+          {isLoading ? 'Connecting...' : 'Start Interview'}
         </button>
         <button
           onClick={stopConversation}
           disabled={conversation.status !== 'connected'}
           className="px-4 py-2 bg-red-500 text-white rounded disabled:bg-gray-300 hover:bg-red-600 transition-colors"
         >
-          Stop Conversation
+          End Interview
         </button>
       </div>
 
