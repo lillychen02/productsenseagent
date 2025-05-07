@@ -1,15 +1,57 @@
 'use client';
 
 import { useConversation } from '@11labs/react';
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 
 export function Conversation() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [sessionId, setSessionId] = useState<string>('');
+  const [transcripts, setTranscripts] = useState<Array<{role: string, content: string}>>([]);
+
+  // Generate a session ID when the component mounts
+  useEffect(() => {
+    setSessionId(`session-${Date.now()}`);
+  }, []);
+
+  // Function to save a message to the transcript API
+  const saveTranscript = async (role: string, content: string) => {
+    try {
+      await fetch('/api/transcripts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sessionId,
+          role,
+          content,
+        }),
+      });
+    } catch (error) {
+      console.error('Failed to save transcript:', error);
+    }
+  };
 
   const conversation = useConversation({
     onConnect: () => console.log('Connected'),
     onDisconnect: () => console.log('Disconnected'),
-    onMessage: (message) => console.log('Message:', message),
+    onMessage: (message) => {
+      console.log('Message:', message);
+      
+      // Only process messages with content
+      if (message && message.text) {
+        // Determine if this is from the user or AI
+        const role = message.from === 'agent' ? 'interviewer' : 'candidate';
+        const content = message.text;
+        
+        // Add to local state for display
+        const newTranscript = { role, content };
+        setTranscripts(prev => [...prev, newTranscript]);
+        
+        // Send to API
+        saveTranscript(role, content);
+      }
+    },
     onError: (error) => console.error('Error:', error),
   });
 
@@ -51,7 +93,7 @@ export function Conversation() {
   }, [conversation]);
 
   return (
-    <div className="flex flex-col items-center gap-4 p-6 bg-white rounded-lg shadow-md">
+    <div className="flex flex-col items-center gap-4 p-6 bg-white rounded-lg shadow-md w-full max-w-2xl">
       <div className="flex gap-2">
         <button
           onClick={startConversation}
@@ -92,6 +134,27 @@ export function Conversation() {
           )}
         </div>
       </div>
+
+      {/* Transcript Display */}
+      {transcripts.length > 0 && (
+        <div className="w-full mt-6 border rounded-lg overflow-hidden">
+          <div className="bg-gray-50 px-4 py-2 border-b">
+            <h3 className="font-medium">Transcript</h3>
+          </div>
+          <div className="p-4 max-h-80 overflow-y-auto">
+            {transcripts.map((item, index) => (
+              <div key={index} className={`mb-3 p-2 rounded ${
+                item.role === 'interviewer' 
+                ? 'bg-blue-50 border-l-4 border-blue-300' 
+                : 'bg-gray-50 border-l-4 border-gray-300'
+              }`}>
+                <p className="font-semibold mb-1">{item.role === 'interviewer' ? 'Interviewer' : 'You'}</p>
+                <p>{item.content}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 } 
