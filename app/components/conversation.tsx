@@ -1,12 +1,17 @@
 'use client';
 
 import { useConversation } from '@11labs/react';
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
 
 export function Conversation() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [sessionId, setSessionId] = useState<string>('');
   const [transcripts, setTranscripts] = useState<Array<{role: string, content: string}>>([]);
+  
+  // Timer state
+  const [elapsedTime, setElapsedTime] = useState<number>(0);
+  const [isTimerRunning, setIsTimerRunning] = useState<boolean>(false);
+  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Generate a session ID when the component mounts
   useEffect(() => {
@@ -82,6 +87,33 @@ export function Conversation() {
     }
   }, []);
 
+  // Timer effect to update elapsed time
+  useEffect(() => {
+    if (isTimerRunning) {
+      timerIntervalRef.current = setInterval(() => {
+        setElapsedTime(prevTime => prevTime + 1);
+      }, 1000);
+    } else if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+
+    // Cleanup function
+    return () => {
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+      }
+    };
+  }, [isTimerRunning]);
+
+  // Format elapsed time as mm:ss
+  const formatTime = (seconds: number): string => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
+
   // Function to save a message to the transcript API
   const saveTranscript = async (role: string, content: string) => {
     console.log('Saving transcript:', { sessionId, role, content });
@@ -113,9 +145,13 @@ export function Conversation() {
   const conversation = useConversation({
     onConnect: () => {
       console.log('ElevenLabs voice agent connected');
+      // Start the timer when connected
+      setIsTimerRunning(true);
     },
     onDisconnect: () => {
       console.log('ElevenLabs voice agent disconnected');
+      // Stop the timer when disconnected
+      setIsTimerRunning(false);
     },
     onMessage: (message) => {
       console.log('Raw message from ElevenLabs:', message);
@@ -160,6 +196,9 @@ export function Conversation() {
   const startConversation = useCallback(async () => {
     try {
       setIsLoading(true);
+      // Reset elapsed time when starting new conversation
+      setElapsedTime(0);
+      
       // Request microphone permission
       await navigator.mediaDevices.getUserMedia({ audio: true });
 
@@ -182,6 +221,8 @@ export function Conversation() {
     console.log('Ending conversation session');
     await conversation.endSession();
     console.log('Conversation session ended');
+    // Stop the timer
+    setIsTimerRunning(false);
   }, [conversation]);
 
   return (
@@ -204,7 +245,20 @@ export function Conversation() {
       </div>
 
       <div className="flex flex-col items-center">
-        <p className="text-gray-700">Status: <span className="font-medium">{conversation.status}</span></p>
+        <div className="flex items-center gap-4">
+          <p className="text-gray-700">Status: <span className="font-medium">{conversation.status}</span></p>
+          
+          {/* Timer display */}
+          {isTimerRunning && (
+            <div className="px-3 py-1 bg-gray-100 rounded-full font-medium flex items-center gap-1">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>{formatTime(elapsedTime)}</span>
+            </div>
+          )}
+        </div>
+        
         <div className="flex items-center gap-2 mt-2">
           {conversation.isSpeaking && (
             <div className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium flex items-center gap-1">
