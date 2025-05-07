@@ -20,14 +20,43 @@ export function Conversation() {
         getTranscripts: () => transcripts,
         testTranscript: async () => {
           console.log('Adding test transcript...');
-          const testData = {
-            role: 'interviewer',
-            content: 'This is a test message from the interviewer.'
+          
+          // Simulate an ElevenLabs message with the correct structure
+          const mockElevenLabsMessage = {
+            source: 'ai',
+            message: 'This is a test message from the interviewer.'
           };
+          
+          // Process it like a real message
+          const role = mockElevenLabsMessage.source === 'ai' ? 'interviewer' : 'candidate';
+          const content = mockElevenLabsMessage.message;
+          
+          const testData = { role, content };
           setTranscripts(prev => [...prev, testData]);
-          await saveTranscript(testData.role, testData.content);
+          await saveTranscript(role, content);
+          
           console.log('Test transcript added');
           return 'Test transcript added';
+        },
+        testUserMessage: async () => {
+          console.log('Adding test user message...');
+          
+          // Simulate a user message with the correct structure
+          const mockUserMessage = {
+            source: 'user',
+            message: 'This is a test response from the candidate.'
+          };
+          
+          // Process it like a real message
+          const role = mockUserMessage.source === 'ai' ? 'interviewer' : 'candidate';
+          const content = mockUserMessage.message;
+          
+          const testData = { role, content };
+          setTranscripts(prev => [...prev, testData]);
+          await saveTranscript(role, content);
+          
+          console.log('Test user message added');
+          return 'Test user message added';
         },
         checkAPI: async () => {
           try {
@@ -46,7 +75,10 @@ export function Conversation() {
         }
       };
       
-      console.log('Debug functions available. Run window.debugTranscripts.testTranscript() to test');
+      console.log('Debug functions available. Try:');
+      console.log('- window.debugTranscripts.testTranscript() - Add AI message');
+      console.log('- window.debugTranscripts.testUserMessage() - Add user message');
+      console.log('- window.debugTranscripts.checkAPI() - Check saved transcripts');
     }
   }, []);
 
@@ -88,11 +120,11 @@ export function Conversation() {
     onMessage: (message) => {
       console.log('Raw message from ElevenLabs:', message);
       
-      // Only process messages with content
-      if (message && message.text) {
+      // Check for message content in the correct property
+      if (message && message.message) {
         // Determine if this is from the user or AI
-        const role = message.from === 'agent' ? 'interviewer' : 'candidate';
-        const content = message.text;
+        const role = message.source === 'ai' ? 'interviewer' : 'candidate';
+        const content = message.message;
         
         console.log(`Processing ${role} message:`, content);
         
@@ -103,7 +135,7 @@ export function Conversation() {
         // Send to API
         saveTranscript(role, content);
       } else {
-        console.warn('Received message without text content:', message);
+        console.warn('Received message without proper content:', message);
       }
     },
     onError: (error) => {

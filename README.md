@@ -44,8 +44,11 @@ The application includes a transcript feature that captures and displays all con
 2. Look for console logs showing transcript activity
 3. Use the built-in debug helpers to test transcript functionality:
    ```javascript
-   // Add a test transcript message
+   // Add a test AI message (simulates interviewer)
    window.debugTranscripts.testTranscript()
+   
+   // Add a test user message (simulates candidate)
+   window.debugTranscripts.testUserMessage()
    
    // Check the transcript API data
    window.debugTranscripts.checkAPI()
