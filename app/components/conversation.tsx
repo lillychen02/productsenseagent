@@ -226,26 +226,26 @@ export function Conversation() {
   }, [conversation]);
 
   return (
-    <div className="flex flex-col items-center gap-4 p-6 bg-white rounded-lg shadow-md w-full max-w-2xl">
-      <div className="flex gap-2">
+    <div className="flex flex-col items-center gap-4 p-6 bg-white rounded-lg shadow-md w-full conversation-container">
+      <div className="flex gap-2 justify-center">
         <button
           onClick={startConversation}
           disabled={conversation.status === 'connected' || isLoading}
-          className="px-4 py-2 bg-blue-500 text-white rounded disabled:bg-gray-300 hover:bg-blue-600 transition-colors"
+          className="px-6 py-3 bg-blue-500 text-white rounded-md disabled:bg-gray-300 hover:bg-blue-600 transition-colors text-base font-medium"
         >
           {isLoading ? 'Connecting...' : 'Start Interview'}
         </button>
         <button
           onClick={stopConversation}
           disabled={conversation.status !== 'connected'}
-          className="px-4 py-2 bg-red-500 text-white rounded disabled:bg-gray-300 hover:bg-red-600 transition-colors"
+          className="px-6 py-3 bg-red-500 text-white rounded-md disabled:bg-gray-300 hover:bg-red-600 transition-colors text-base font-medium"
         >
           End Interview
         </button>
       </div>
 
-      <div className="flex flex-col items-center">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col items-center my-4">
+        <div className="flex items-center gap-4 justify-center">
           <p className="text-gray-700">Status: <span className="font-medium">{conversation.status}</span></p>
           
           {/* Timer display */}
@@ -259,7 +259,7 @@ export function Conversation() {
           )}
         </div>
         
-        <div className="flex items-center gap-2 mt-2">
+        <div className="flex items-center gap-2 mt-2 justify-center">
           {conversation.isSpeaking && (
             <div className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium flex items-center gap-1">
               <span className="flex h-2 w-2 relative">
@@ -283,7 +283,7 @@ export function Conversation() {
 
       {/* Transcript Display */}
       {transcripts.length > 0 && (
-        <div className="w-full mt-6 border rounded-lg overflow-hidden">
+        <div className="w-full mt-2 border rounded-lg overflow-hidden">
           <div className="bg-gray-50 px-4 py-2 border-b">
             <h3 className="font-medium">Transcript</h3>
           </div>
