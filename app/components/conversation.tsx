@@ -2,8 +2,10 @@
 
 import { useConversation } from '@11labs/react';
 import { useCallback, useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 
 export function Conversation() {
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [sessionId, setSessionId] = useState<string>('');
   const [transcripts, setTranscripts] = useState<Array<{role: string, content: string}>>([]);
@@ -204,11 +206,12 @@ export function Conversation() {
       const result = await response.json();
       console.log('Scoring successful:', result);
       if (result.score) {
-        setScoreResult(result.score); // Assuming the API returns { message: string, score: StoredScore }
-        alert('Session scored successfully! Results will be displayed.');
+        // setScoreResult(result.score); // No longer set score here, will be fetched by results page
+        alert('Session scored! Redirecting to results page.');
+        router.push(`/results/${sessionId}`); // Programmatic redirect
       } else {
         console.error('Scoring response did not contain score data:', result);
-        alert('Scoring completed, but no score data was returned.');
+        alert('Scoring completed, but no score data was returned. Cannot redirect.');
       }
     } catch (error) {
       console.error('Error during scoring process:', error);
@@ -290,30 +293,52 @@ export function Conversation() {
     setTimeout(() => {
         scoreCurrentSession();
     }, 1000); 
-  }, [conversation, sessionId]); // Added sessionId to dependencies of stopConversation
+  }, [conversation, sessionId, router]); // Added router to dependencies of stopConversation
 
   return (
-    <div className="flex flex-col items-center gap-4 p-6 bg-white rounded-lg shadow-md w-full conversation-container">
-      <div className="flex gap-2 justify-center">
-        <button
-          onClick={startConversation}
-          disabled={conversation.status === 'connected' || isLoading || isScoring}
-          className="px-6 py-3 bg-blue-500 text-white rounded-md disabled:bg-gray-300 hover:bg-blue-600 transition-colors text-base font-medium"
-        >
-          {isLoading ? 'Connecting...' : (isScoring ? 'Scoring in progress' : 'Start Interview')}
-        </button>
-        <button
-          onClick={stopConversation}
-          disabled={conversation.status !== 'connected' || isScoring}
-          className="px-6 py-3 bg-red-500 text-white rounded-md disabled:bg-gray-300 hover:bg-red-600 transition-colors text-base font-medium"
-        >
-          {isScoring ? 'Scoring...' : 'End Interview'}
-        </button>
+    <div className="flex flex-col items-center gap-4 w-full conversation-container p-6">
+      {/* Buttons - Conditional Rendering */}
+      <div className="flex gap-2 justify-center h-12"> {/* Added fixed height to prevent layout shift */}
+        {conversation.status !== 'connected' && !isLoading && !isScoring && (
+          <button
+            onClick={startConversation}
+            // disabled is implicitly handled by conditional rendering, but kept for clarity if needed elsewhere
+            // disabled={conversation.status === 'connected' || isLoading || isScoring}
+            className="px-6 py-3 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors text-base font-medium"
+          >
+            Start Interview
+          </button>
+        )}
+        {isLoading && (
+          <button
+            disabled
+            className="px-6 py-3 bg-gray-300 text-white rounded-md text-base font-medium"
+          >
+            Connecting...
+          </button>
+        )}
+        {conversation.status === 'connected' && !isScoring && (
+          <button
+            onClick={stopConversation}
+            // disabled={conversation.status !== 'connected' || isScoring}
+            className="px-6 py-3 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors text-base font-medium"
+          >
+            End Interview
+          </button>
+        )}
+        {isScoring && (
+          <button
+            disabled
+            className="px-6 py-3 bg-gray-300 text-white rounded-md text-base font-medium"
+          >
+            Scoring...
+          </button>
+        )}
       </div>
 
       <div className="flex flex-col items-center my-4">
         <div className="flex items-center gap-4 justify-center">
-          <p className="text-gray-700">Status: <span className="font-medium">{conversation.status}</span></p>
+          {/* <p className="text-gray-700">Status: <span className="font-medium">{conversation.status}</span></p> -- Removed */}
           
           {isTimerRunning && (
             <div className="px-3 py-1 bg-gray-100 rounded-full font-medium flex items-center gap-1">
@@ -347,7 +372,8 @@ export function Conversation() {
         </div>
       </div>
 
-      {/* Transcript Display */}
+      {/* Transcript Display - Commented Out */}
+      {/* 
       {transcripts.length > 0 && (
         <div className="w-full mt-2 border rounded-lg overflow-hidden">
           <div className="bg-gray-50 px-4 py-2 border-b">
@@ -367,82 +393,15 @@ export function Conversation() {
           </div>
         </div>
       )}
+      */}
 
-      {/* Score Results Display */}
-      {isScoring && (
+      {/* Score Results Display is REMOVED from here - will be on its own page */}
+      {isScoring && !scoreResult && (
         <div className="w-full mt-4 p-4 text-center text-gray-600">
           Scoring interview, please wait...
         </div>
       )}
-      {scoreResult && (
-        <div className="w-full mt-4 border rounded-lg overflow-hidden bg-white">
-          <div className="bg-gray-100 px-4 py-3 border-b">
-            <h3 className="text-lg font-semibold leading-6 text-gray-900">Interview Assessment</h3>
-            <p className="mt-1 text-sm text-gray-500">Rubric: {scoreResult.rubricName}</p>
-          </div>
-          <div className="p-4 md:p-6">
-            <div className="mb-6 pb-4 border-b">
-              <h4 className="text-base font-semibold text-gray-700 mb-1">Overall Recommendation:</h4>
-              <p className={`text-xl font-bold ${ 
-                  scoreResult.llmResponse?.overall_recommendation === 'Strong Hire' ? 'text-green-700' :
-                  scoreResult.llmResponse?.overall_recommendation === 'Hire' ? 'text-green-600' :
-                  scoreResult.llmResponse?.overall_recommendation === 'Mixed' ? 'text-yellow-600' :
-                  'text-red-600' 
-                }`}>
-                {scoreResult.llmResponse?.overall_recommendation || 'N/A'}
-              </p>
-              {scoreResult.llmResponse?.summary_feedback && (
-                  <p className="mt-2 text-sm text-gray-600">{scoreResult.llmResponse.summary_feedback}</p>
-              )}
-            </div>
-            
-            <h4 className="text-base font-semibold text-gray-700 mb-3">Dimension Scores:</h4>
-            <div className="space-y-5">
-              {scoreResult.llmResponse?.scores?.map((scoreItem: any, index: number) => (
-                <div key={index} className="pb-4 border-b last:border-b-0">
-                  <div className="flex justify-between items-start mb-2">
-                    <h5 className="font-medium text-gray-800">{scoreItem.dimension}</h5>
-                    <span className="font-bold text-lg text-blue-600">
-                      {/* Display score or 'N/A' if null */}
-                      {scoreItem.score !== null ? `${scoreItem.score} / 4` : 'N/A'} 
-                    </span>
-                  </div>
-                  {/* Render Strengths */}
-                  {scoreItem.feedback?.strengths && scoreItem.feedback.strengths.length > 0 && (
-                    <div className="mt-1 mb-2 pl-4">
-                      <p className="text-sm font-medium text-green-700">Strengths:</p>
-                      <ul className="list-disc list-inside text-sm text-gray-600">
-                        {scoreItem.feedback.strengths.map((strength: string, sIdx: number) => (
-                          <li key={`s-${index}-${sIdx}`}>{strength}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {/* Render Weaknesses */}
-                  {scoreItem.feedback?.weaknesses && scoreItem.feedback.weaknesses.length > 0 && (
-                    <div className="mt-1 mb-1 pl-4">
-                       <p className="text-sm font-medium text-red-700">Weaknesses:</p>
-                       <ul className="list-disc list-inside text-sm text-gray-600">
-                        {scoreItem.feedback.weaknesses.map((weakness: string, wIdx: number) => (
-                          <li key={`w-${index}-${wIdx}`}>{weakness}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {/* Handle case where feedback object might be missing */}
-                  {!scoreItem.feedback && (
-                    <p className="text-sm text-gray-500 italic mt-1">No detailed feedback available.</p>
-                  )}
-                </div>
-              ))}
-              {/* Handle case where scores array might be missing */}
-              {(!scoreResult.llmResponse?.scores || scoreResult.llmResponse.scores.length === 0) && (
-                <p className="text-sm text-gray-500 italic">No detailed dimension scores available.</p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* The actual score result display is removed as we will navigate away */}
 
     </div>
   );

@@ -5,8 +5,8 @@ import { Inter } from 'next/font/google'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Product Sense Interview',
-  description: 'Voice conversations with ElevenLabs AI agents',
+  title: 'Loopie - AI Interview Practice',
+  description: 'Practice interviews and get AI-powered feedback with Loopie',
 }
 
 export default function RootLayout({
@@ -16,7 +16,17 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>{children}</body>
+      <body className={`${inter.className} bg-gray-50`}>
+        <header className="py-4 px-6 sm:px-8 w-full bg-white shadow-sm">
+          <div className="flex items-baseline">
+            <h1 className="text-2xl font-bold text-indigo-600">Loopie</h1>
+            <span className="ml-3 text-sm text-gray-500">Your AI coach for product manager interviews</span>
+          </div>
+        </header>
+        <main className="p-4 sm:p-6">
+          {children}
+        </main>
+      </body>
     </html>
   )
 } 
