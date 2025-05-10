@@ -21,6 +21,7 @@ interface RubricDimension {
   dimension: string;
   description: string;
   subcriteria: string[];
+  exemplar_response?: string | string[];
 }
 
 interface RoleVariantDetail {

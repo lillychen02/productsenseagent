@@ -2,8 +2,35 @@ import { NextResponse } from 'next/server';
 import { connectToDatabase } from '../../../../lib/mongodb'; // Adjust path as needed
 import { ObjectId } from 'mongodb';
 
-// Assuming StoredScore and TranscriptEntry interfaces are defined elsewhere
-// or we can redefine minimal versions here if not shared.
+// Updated to reflect potential new fields in Rubric for exemplar responses
+interface ScoringDetail { '1': string; '2': string; '3': string; '4': string; }
+interface RubricDimensionDefinition {
+  dimension: string;
+  description: string;
+  subcriteria: string[];
+  exemplar_response?: string | string[]; // Added
+}
+interface RoleVariantDetail { emphasized_dimensions: string[]; }
+interface RoleVariants { [key: string]: RoleVariantDetail | undefined; }
+interface RubricMetadata {
+  role_variants?: RoleVariants;
+  minimum_bar?: { required_dimensions: string[]; rule: string; };
+}
+interface RubricDefinition {
+  scoring_scale: ScoringDetail;
+  evaluation_criteria: RubricDimensionDefinition[];
+  scoring_guide: { [key: string]: string; };
+  metadata?: RubricMetadata;
+}
+interface FullRubric {
+  _id?: ObjectId;
+  name: string;
+  definition: RubricDefinition;
+  systemPrompt?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
 interface ScoreItem {
   dimension: string;
   score: number | null;
@@ -58,6 +85,10 @@ export async function GET(
       return NextResponse.json({ error: 'Score not found for this session' }, { status: 404 });
     }
 
+    // Fetch the full rubric definition using rubricId from scoreData
+    const rubric = await db.collection<FullRubric>('rubrics').findOne({ _id: new ObjectId(scoreData.rubricId) });
+    if (!rubric) return NextResponse.json({ error: 'Rubric associated with the score not found' }, { status: 404 });
+
     // 2. Fetch all transcript entries for the session
     const transcripts = await db.collection<TranscriptEntry>('transcripts')
       .find({ sessionId })
@@ -73,6 +104,7 @@ export async function GET(
 
     return NextResponse.json({
       scoreData,
+      rubricDefinition: rubric.definition, // Return the full rubric definition
       transcriptText,
       audioDownloadUrl,
     }, { status: 200 });

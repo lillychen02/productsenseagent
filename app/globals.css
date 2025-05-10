@@ -19,6 +19,21 @@ body {
 }
 
 .conversation-container {
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  /* box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08); */ /* Shadow removed */
   border-radius: 12px;
+}
+
+@layer utilities {
+  @keyframes pulse-glow {
+    0%, 100% {
+      box-shadow: 0 0 3px rgba(59, 130, 246, 0.2), 0 0 6px rgba(59, 130, 246, 0.2);
+    }
+    50% {
+      box-shadow: 0 0 10px rgba(59, 130, 246, 0.5), 0 0 15px rgba(59, 130, 246, 0.4);
+    }
+  }
+
+  .timer-active-glow {
+    animation: pulse-glow 2s infinite ease-in-out;
+  }
 } 

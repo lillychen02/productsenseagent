@@ -172,24 +172,22 @@ export function Conversation() {
     if (!sessionId) {
       console.error('No session ID available for scoring.');
       alert('Error: No session ID. Cannot score.');
+      setIsScoring(false); // Reset on early exit
       return;
     }
     if (!defaultRubricId.current) {
       console.error('No default rubric ID available for scoring.');
       alert('Error: Rubric not configured. Cannot score.');
+      setIsScoring(false); // Reset on early exit
       return;
     }
 
-    setIsScoring(true);
-    setScoreResult(null); // Clear previous results
     console.log(`Attempting to score session ${sessionId} with rubric ${defaultRubricId.current}`);
 
     try {
       const response = await fetch('/api/score-session', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionId: sessionId,
           rubricId: defaultRubricId.current,
@@ -200,25 +198,26 @@ export function Conversation() {
         const errorData = await response.json().catch(() => ({ error: "Failed to parse error response from scoring API." }));
         console.error('Scoring API call failed:', response.status, errorData);
         alert(`Error scoring session: ${errorData.error || response.statusText}`);
-        throw new Error(`Scoring API request failed with status ${response.status}`);
+        setIsScoring(false); // Reset on API error
+        return; // Exit if API call failed
       }
 
       const result = await response.json();
       console.log('Scoring successful:', result);
       if (result.score) {
-        // setScoreResult(result.score); // No longer set score here, will be fetched by results page
         alert('Session scored! Redirecting to results page.');
-        router.push(`/results/${sessionId}`); // Programmatic redirect
+        router.push(`/results/${sessionId}`);
+        // setIsScoring will effectively be false on the new page or if user navigates back
       } else {
         console.error('Scoring response did not contain score data:', result);
         alert('Scoring completed, but no score data was returned. Cannot redirect.');
+        setIsScoring(false); // Reset if no score data
       }
     } catch (error) {
       console.error('Error during scoring process:', error);
       alert(`An error occurred while scoring the session: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setIsScoring(false);
-    }
+      setIsScoring(false); // Reset on catch-all error
+    } 
   };
 
   const conversation = useConversation({
@@ -284,19 +283,19 @@ export function Conversation() {
 
   const stopConversation = useCallback(async () => {
     console.log('Ending conversation session');
+    setIsScoring(true); // Set immediately to prevent UI flicker
+
     await conversation.endSession();
     console.log('Conversation session ended');
     setIsTimerRunning(false);
 
-    // Trigger scoring after ending the session
-    // Add a small delay to ensure final transcripts might be saved if any race condition
     setTimeout(() => {
         scoreCurrentSession();
-    }, 1000); 
-  }, [conversation, sessionId, router]); // Added router to dependencies of stopConversation
+    }, 3000); 
+  }, [conversation, sessionId, router]);
 
   return (
-    <div className="flex flex-col items-center gap-4 w-full conversation-container p-6">
+    <div className="flex flex-col items-center gap-4 w-full conversation-container pt-2 pb-6 px-6">
       {/* Buttons - Conditional Rendering */}
       <div className="flex gap-2 justify-center h-12"> {/* Added fixed height to prevent layout shift */}
         {conversation.status !== 'connected' && !isLoading && !isScoring && (
@@ -341,7 +340,7 @@ export function Conversation() {
           {/* <p className="text-gray-700">Status: <span className="font-medium">{conversation.status}</span></p> -- Removed */}
           
           {isTimerRunning && (
-            <div className="px-3 py-1 bg-gray-100 rounded-full font-medium flex items-center gap-1">
+            <div className={`px-3 py-1 bg-gray-100 rounded-full font-medium flex items-center gap-1 ${isTimerRunning ? 'timer-active-glow' : ''}`}>
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
@@ -351,7 +350,7 @@ export function Conversation() {
         </div>
         
         <div className="flex items-center gap-2 mt-2 justify-center">
-          {conversation.isSpeaking && (
+          {conversation.isSpeaking && !isScoring && (
             <div className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium flex items-center gap-1">
               <span className="flex h-2 w-2 relative">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
@@ -360,10 +359,10 @@ export function Conversation() {
               Speaking
             </div>
           )}
-          {!conversation.isSpeaking && conversation.status === 'connected' && (
+          {!conversation.isSpeaking && conversation.status === 'connected' && !isScoring && (
             <div className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium flex items-center gap-1">
               <span className="flex h-2 w-2 relative">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                <span className="absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
               </span>
               Listening

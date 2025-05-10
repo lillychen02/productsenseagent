@@ -11,6 +11,7 @@ interface ScoreItem {
   feedback: {
     strengths: string[];
     weaknesses: string[];
+    exemplar_response_suggestion?: string;
   };
 }
 interface LLMScoreResponse {
@@ -196,6 +197,15 @@ export default function ResultsPage() {
                     </ul>
                   </div>
                 )}
+
+                {/* Display Exemplar Response Suggestion */}
+                {item.score !== null && item.score < 4 && item.feedback?.exemplar_response_suggestion && (
+                  <div className="mt-3 pt-3 border-t border-dashed border-gray-300">
+                    <h4 className="text-sm font-medium text-indigo-600 mb-1">💡 Here's what a great response might look like:</h4>
+                    <p className="text-sm text-gray-600 italic">{item.feedback.exemplar_response_suggestion}</p>
+                  </div>
+                )}
+
                 {(item.feedback?.strengths?.[0] === "This dimension was not reached in the interview." || item.feedback?.weaknesses?.[0] === "This dimension was not reached in the interview.") && (
                    <p className="text-gray-500 italic mt-2">This dimension was not reached in the interview.</p>
                 )}
