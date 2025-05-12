@@ -18,66 +18,7 @@ import type {
     // RubricMetadata // Part of RubricDefinition
 } from '../../../types/index.ts';
 
-// Lines 22-80 (original local interface definitions) have been removed.
-
-// Define the structure of a Rubric
-interface ScoringDetail {
-  '1': string;
-  '2': string;
-  '3': string;
-  '4': string;
-}
-
-// Updated RubricDimension for the array structure
-interface RubricDimension {
-  dimension: string;
-  description: string;
-  subcriteria: string[];
-  exemplar_response?: string | string[];
-}
-
-interface RoleVariantDetail {
-  emphasized_dimensions: string[];
-}
-
-interface RoleVariants {
-  zero_to_one_pm?: RoleVariantDetail;
-  growth_pm?: RoleVariantDetail;
-  consumer_pm?: RoleVariantDetail;
-  [key: string]: RoleVariantDetail | undefined;
-}
-
-interface RubricMetadata {
-  role_variants?: RoleVariants;
-  minimum_bar?: {
-    required_dimensions: string[];
-    rule: string;
-  }
-}
-
-// Updated RubricDefinition to match the new structure
-interface RubricDefinition {
-  scoring_scale: ScoringDetail;
-  evaluation_criteria: RubricDimension[]; // Array of dimensions
-  scoring_guide: { // Matches new field name
-    "Strong Hire": string;
-    "Hire": string;
-    "Mixed": string;
-    "No Hire": string;
-    [key: string]: string; 
-  };
-  metadata?: RubricMetadata; // New optional metadata
-}
-
-// Updated Rubric interface to include optional systemPrompt
-interface Rubric {
-  _id?: ObjectId;
-  name: string;
-  definition: RubricDefinition;
-  systemPrompt?: string; // Optional: Custom system prompt for this rubric/interview type
-  createdAt?: Date;
-  updatedAt?: Date;
-}
+type RubricDocument = Rubric;
 
 // GET handler to fetch all rubrics
 export async function GET(request: Request) {
@@ -88,7 +29,7 @@ export async function GET(request: Request) {
     console.timeEnd('rubricApiConnectDb');
 
     console.time('rubricApiFetchRubrics');
-    const rubrics = await db.collection<Rubric>('rubrics').find({}).toArray();
+    const rubrics = await db.collection<RubricDocument>('rubrics').find({}).toArray();
     console.timeEnd('rubricApiFetchRubrics');
 
     console.log(`Found ${rubrics.length} rubrics.`);
@@ -125,7 +66,7 @@ export async function POST(request: Request) {
     const { name, definition, systemPrompt } = body as { name: string; definition: RubricDefinition; systemPrompt?: string };
 
     const { db } = await connectToDatabase();
-    const newRubric: Omit<Rubric, '_id'> = {
+    const newRubric: Omit<RubricDocument, '_id'> = {
       name,
       definition,
       systemPrompt,
@@ -133,13 +74,13 @@ export async function POST(request: Request) {
       updatedAt: new Date(),
     };
 
-    const result = await db.collection<Rubric>('rubrics').insertOne(newRubric as Rubric);
+    const result = await db.collection<RubricDocument>('rubrics').insertOne(newRubric as RubricDocument);
 
     if (!result.insertedId) {
         return NextResponse.json({ error: 'Failed to create rubric, no insertedId returned' }, { status: 500 });
     }
     
-    const createdRubric = await db.collection<Rubric>('rubrics').findOne({ _id: result.insertedId });
+    const createdRubric = await db.collection<RubricDocument>('rubrics').findOne({ _id: result.insertedId });
 
     return NextResponse.json({ message: 'Rubric created successfully', rubric: createdRubric }, { status: 201 });
   } catch (error) {
