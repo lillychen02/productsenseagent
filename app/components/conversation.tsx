@@ -7,7 +7,9 @@ import { useRouter } from 'next/navigation';
 export function Conversation() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isRubricLoading, setIsRubricLoading] = useState<boolean>(true);
   const [sessionId, setSessionId] = useState<string>('');
+  const sessionIdRef = useRef<string>('');
   const [transcripts, setTranscripts] = useState<Array<{role: string, content: string}>>([]);
   
   // Timer state
@@ -17,100 +19,42 @@ export function Conversation() {
 
   // Scoring state
   const defaultRubricId = useRef<string | null>(null);
+  const defaultRubricName = useRef<string | null>(null);
   const [isScoring, setIsScoring] = useState<boolean>(false);
   const [scoreResult, setScoreResult] = useState<any>(null); // Will be typed more specifically later
 
-  // Generate a session ID and fetch default rubric when the component mounts
   useEffect(() => {
-    const newSessionId = `session-${Date.now()}`;
-    console.log('Generated session ID:', newSessionId);
-    setSessionId(newSessionId);
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
 
+  useEffect(() => {
     const fetchDefaultRubric = async () => {
+      setIsRubricLoading(true);
       try {
         const response = await fetch('/api/rubrics');
         if (response.ok) {
           const data = await response.json();
           if (data.rubrics && data.rubrics.length > 0) {
-            // Assuming the first rubric is the one we want for "Product Sense"
-            defaultRubricId.current = data.rubrics[0]._id; // Store the ID
-            console.log('Default rubric ID set:', defaultRubricId.current);
-          } else {
-            console.warn('No rubrics found in the database.');
+            defaultRubricId.current = data.rubrics[0]._id;
+            defaultRubricName.current = data.rubrics[0].name;
+            console.log('Default rubric ID set:', defaultRubricId.current, 'Name:', defaultRubricName.current);
+          } else { 
+            console.warn('No rubrics found.');
+            alert('Error: Could not load interview rubric. Please try refreshing.');
           }
-        } else {
-          console.error('Failed to fetch rubrics:', await response.text());
+        } else { 
+            console.error('Failed to fetch rubrics.'); 
+            alert('Error: Could not load interview rubric configuration. Please try refreshing.');
         }
-      } catch (error) {
-        console.error('Error fetching default rubric:', error);
+      } catch (error) { 
+        console.error('Error fetching rubric:', error); 
+        alert('An error occurred while loading the interview rubric. Please try refreshing.');
+      } finally {
+        setIsRubricLoading(false);
       }
     };
-
     fetchDefaultRubric();
-    
-    // Add debug helper to window object
-    if (typeof window !== 'undefined') {
-      (window as any).debugTranscripts = {
-        getTranscripts: () => transcripts,
-        testTranscript: async () => {
-          console.log('Adding test transcript...');
-          
-          const mockElevenLabsMessage = {
-            source: 'ai',
-            message: 'This is a test message from the interviewer.'
-          };
-          
-          const role = mockElevenLabsMessage.source === 'ai' ? 'interviewer' : 'candidate';
-          const content = mockElevenLabsMessage.message;
-          
-          const testData = { role, content };
-          setTranscripts(prev => [...prev, testData]);
-          await saveTranscript(role, content);
-          
-          console.log('Test transcript added');
-          return 'Test transcript added';
-        },
-        testUserMessage: async () => {
-          console.log('Adding test user message...');
-          
-          const mockUserMessage = {
-            source: 'user',
-            message: 'This is a test response from the candidate.'
-          };
-          
-          const role = mockUserMessage.source === 'ai' ? 'interviewer' : 'candidate';
-          const content = mockUserMessage.message;
-          
-          const testData = { role, content };
-          setTranscripts(prev => [...prev, testData]);
-          await saveTranscript(role, content);
-          
-          console.log('Test user message added');
-          return 'Test user message added';
-        },
-        checkAPI: async () => {
-          try {
-            const response = await fetch('/api/transcripts');
-            const data = await response.json();
-            console.log('API response:', data);
-            return data;
-          } catch (error) {
-            console.error('API check failed:', error);
-            return 'API check failed';
-          }
-        },
-        logSessionId: () => {
-          console.log('Current session ID:', sessionId);
-          return sessionId;
-        }
-      };
-      
-      console.log('Debug functions available. Try:');
-      console.log('- window.debugTranscripts.testTranscript() - Add AI message');
-      console.log('- window.debugTranscripts.testUserMessage() - Add user message');
-      console.log('- window.debugTranscripts.checkAPI() - Check saved transcripts');
-    }
-  }, []); // transcripts and saveTranscript removed from deps if they don't need to re-trigger this effect
+  }, []);
 
   // Timer effect to update elapsed time
   useEffect(() => {
@@ -140,111 +84,113 @@ export function Conversation() {
   };
 
   // Function to save a message to the transcript API
-  const saveTranscript = async (role: string, content: string) => {
-    console.log('Saving transcript:', { sessionId, role, content });
+  const saveTranscript = useCallback(async (role: string, content: string) => {
+    const currentSessionId = sessionIdRef.current;
+    if (!currentSessionId) {
+      console.warn('No ELI conversation_id (from ref) available for saving transcript.');
+      return;
+    }
+    console.log('Saving transcript for ELI conversation_id (from ref):', { sessionId: currentSessionId, role, content });
     try {
       const response = await fetch('/api/transcripts', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          sessionId,
-          role,
-          content,
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: currentSessionId, role, content }),
       });
       
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('Failed to save transcript. Status:', response.status, errorData);
+        console.error('Failed to save transcript. Status:', response.status, await response.json().catch(()=>({})));
       } else {
-        const data = await response.json();
-        console.log('Transcript saved successfully:', data);
+        console.log('Transcript saved successfully:', await response.json());
       }
     } catch (error) {
       console.error('Failed to save transcript:', error);
     }
-  };
+  }, []);
 
   // Function to handle session scoring (will be created next)
-  const scoreCurrentSession = async () => {
-    if (!sessionId) {
-      console.error('No session ID available for scoring.');
+  const scoreCurrentSession = useCallback(async () => {
+    const currentSessionId = sessionIdRef.current;
+    if (!currentSessionId) {
+      console.error('No ELI conversation_id (from ref) available for scoring.');
       alert('Error: No session ID. Cannot score.');
-      setIsScoring(false); // Reset on early exit
+      setIsScoring(false);
       return;
     }
     if (!defaultRubricId.current) {
-      console.error('No default rubric ID available for scoring.');
-      alert('Error: Rubric not configured. Cannot score.');
-      setIsScoring(false); // Reset on early exit
+      console.error('No default rubric ID for scoring.');
+      alert('Error: Rubric not configured.');
+      setIsScoring(false);
       return;
     }
-
-    console.log(`Attempting to score session ${sessionId} with rubric ${defaultRubricId.current}`);
-
+    console.log(`Attempting to score ELI conversation_id ${currentSessionId} with rubric ${defaultRubricId.current}`);
     try {
       const response = await fetch('/api/score-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId: sessionId,
-          rubricId: defaultRubricId.current,
-        }),
+        body: JSON.stringify({ sessionId: currentSessionId, rubricId: defaultRubricId.current }),
       });
-
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Failed to parse error response from scoring API." }));
+        const errorData = await response.json().catch(() => ({ error: "Failed to parse scoring error." }));
         console.error('Scoring API call failed:', response.status, errorData);
-        alert(`Error scoring session: ${errorData.error || response.statusText}`);
-        setIsScoring(false); // Reset on API error
-        return; // Exit if API call failed
+        alert(`Error scoring: ${errorData.error || response.statusText}`);
+        setIsScoring(false);
+        return;
       }
-
       const result = await response.json();
-      console.log('Scoring successful:', result);
       if (result.score) {
-        alert('Session scored! Redirecting to results page.');
-        router.push(`/results/${sessionId}`);
-        // setIsScoring will effectively be false on the new page or if user navigates back
+        alert('Session scored! Redirecting...');
+        router.push(`/results/${currentSessionId}`);
       } else {
-        console.error('Scoring response did not contain score data:', result);
         alert('Scoring completed, but no score data was returned. Cannot redirect.');
-        setIsScoring(false); // Reset if no score data
+        setIsScoring(false);
       }
     } catch (error) {
-      console.error('Error during scoring process:', error);
-      alert(`An error occurred while scoring the session: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      setIsScoring(false); // Reset on catch-all error
-    } 
-  };
+      alert(`Error scoring session: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setIsScoring(false);
+    }
+  }, [defaultRubricId, router]);
 
   const conversation = useConversation({
     onConnect: () => {
-      console.log('ElevenLabs voice agent connected');
+      console.log('ElevenLabs voice agent connected.');
       setIsTimerRunning(true);
       setScoreResult(null); // Clear scores on new session
     },
     onDisconnect: () => {
-      console.log('ElevenLabs voice agent disconnected');
+      console.log('ElevenLabs voice agent disconnected.');
       setIsTimerRunning(false);
+      if (!isScoring) {
+        // alert("Interview disconnected."); // Or a more specific message based on context
+      }
     },
     onMessage: (message) => {
-      console.log('Raw message from ElevenLabs:', message);
-      if (message && message.message) {
+      const currentSessionIdFromRef = sessionIdRef.current;
+      if ((message as any).type === "interruption") {
+        const interruptionEvent = message as any;
+        const reason = interruptionEvent.interruption_event?.reason || "Unknown interruption";
+        console.log("Interruption occurred:", reason, "SessionId was:", currentSessionIdFromRef);
+        setIsTimerRunning(false);
+        alert(`Session interrupted: ${reason}`);
+        return;
+      }
+      if (message && message.message && typeof message.message === 'string') {
+        if (!currentSessionIdFromRef) {
+            console.warn('onMessage: sessionId (from ref) is not set yet. Transcript for:', message.message, 'NOT SAVED');
+            return;
+        }
         const role = message.source === 'ai' ? 'interviewer' : 'candidate';
-        const content = message.message;
-        console.log(`Processing ${role} message:`, content);
-        const newTranscript = { role, content };
-        setTranscripts(prev => [...prev, newTranscript]);
-        saveTranscript(role, content);
+        saveTranscript(role, message.message);
+        setTranscripts(prev => [...prev, {role, content: message.message}]);
       } else {
-        console.warn('Received message without proper content:', message);
+        console.warn('Received message without standard content or unknown type:', message);
       }
     },
     onError: (error) => {
-      console.error('ElevenLabs error:', error);
+      console.error('ElevenLabs SDK Error:', error);
+      setIsTimerRunning(false);
+      alert(`An SDK error occurred: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setIsScoring(false);
     },
   });
 
@@ -263,36 +209,89 @@ export function Conversation() {
   };
 
   const startConversation = useCallback(async () => {
+    if (isRubricLoading || !defaultRubricId.current || !defaultRubricName.current) {
+      alert("Rubric information is still loading or failed to load. Please wait a moment and try again, or refresh the page.");
+      return;
+    }
     try {
       setIsLoading(true);
       setElapsedTime(0);
-      setScoreResult(null); // Clear previous scores when starting a new conversation
+      setTranscripts([]);
+      setSessionId('');
+      sessionIdRef.current = '';
+
       await navigator.mediaDevices.getUserMedia({ audio: true });
       const signedUrl = await getSignedUrl();
-      console.log('Starting conversation with signedUrl');
-      await conversation.startSession({
+      console.log('Attempting to start ElevenLabs session...');
+      
+      const eliSessionData: any = await conversation.startSession({
         signedUrl,
       });
-      console.log('Conversation session started successfully');
+      console.log('Raw result from conversation.startSession():', eliSessionData);
+
+      let extractedEliConversationId: string | undefined;
+      if (typeof eliSessionData === 'string') {
+        extractedEliConversationId = eliSessionData;
+      } else if (eliSessionData && typeof eliSessionData.conversationId === 'string') {
+        extractedEliConversationId = eliSessionData.conversationId;
+      } else if (eliSessionData && typeof eliSessionData.id === 'string') {
+        extractedEliConversationId = eliSessionData.id;
+      }
+
+      if (!extractedEliConversationId) {
+        console.error('Failed to get a valid conversation_id string from ElevenLabs startSession.', "Raw data:", eliSessionData);
+        alert('Error starting session: Could not obtain a valid ElevenLabs conversation ID.');
+        setIsLoading(false);
+        return;
+      }
+      
+      console.log('ElevenLabs session successfully started. ELI Conversation ID:', extractedEliConversationId);
+      setSessionId(extractedEliConversationId);
+
+      // Record session metadata in our DB using the ELI conversation_id
+      try {
+        const metaResponse = await fetch('/api/sessions/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: extractedEliConversationId, 
+            rubricId: defaultRubricId.current,
+            rubricName: defaultRubricName.current,
+            interviewType: defaultRubricName.current 
+          }),
+        });
+        if (metaResponse.ok) {
+          console.log('Session metadata saved using ELI ID:', await metaResponse.json());
+        } else {
+          console.error('Failed to save session metadata:', await metaResponse.text());
+        }
+      } catch (err) {
+        console.error('Error saving session metadata:', err);
+      }
+
     } catch (error) {
       console.error('Failed to start conversation:', error);
+      alert('Failed to start interview. Check permissions and console.');
     } finally {
       setIsLoading(false);
     }
-  }, [conversation]);
+  }, [conversation, defaultRubricId, defaultRubricName, isRubricLoading]);
 
   const stopConversation = useCallback(async () => {
-    console.log('Ending conversation session');
-    setIsScoring(true); // Set immediately to prevent UI flicker
-
+    const currentSessionId = sessionIdRef.current;
+    if (!currentSessionId) {
+        console.warn("Attempted to stop conversation but no active session ID (from ref).");
+        return;
+    }
+    console.log('User ending conversation session:', currentSessionId);
+    setIsScoring(true); 
     await conversation.endSession();
-    console.log('Conversation session ended');
+    console.log('ElevenLabs Conversation session ended by user.');
     setIsTimerRunning(false);
-
     setTimeout(() => {
-        scoreCurrentSession();
+        scoreCurrentSession(); 
     }, 3000); 
-  }, [conversation, sessionId, router]);
+  }, [conversation, router, scoreCurrentSession]);
 
   return (
     <div className="flex flex-col items-center gap-4 w-full conversation-container pt-2 pb-6 px-6">
@@ -301,11 +300,10 @@ export function Conversation() {
         {conversation.status !== 'connected' && !isLoading && !isScoring && (
           <button
             onClick={startConversation}
-            // disabled is implicitly handled by conditional rendering, but kept for clarity if needed elsewhere
-            // disabled={conversation.status === 'connected' || isLoading || isScoring}
-            className="px-6 py-3 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors text-base font-medium"
+            disabled={isRubricLoading}
+            className="px-6 py-3 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:bg-gray-400 transition-colors text-base font-medium"
           >
-            Start Interview
+            {isRubricLoading ? 'Loading Setup...' : 'Start Interview'}
           </button>
         )}
         {isLoading && (

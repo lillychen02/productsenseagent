@@ -7,6 +7,18 @@
 import { NextResponse } from 'next/server';
 import { connectToDatabase } from '../../../lib/mongodb';
 import { ObjectId } from 'mongodb';
+// Importing all necessary rubric-related types from the central types file
+import type { 
+    Rubric, 
+    RubricDefinition, 
+    // ScoringDetail, // Not directly used in handlers, part of RubricDefinition
+    // RubricDimensionDefinition, // Part of RubricDefinition
+    // RoleVariantDetail, // Part of RubricDefinition
+    // RoleVariants, // Part of RubricDefinition
+    // RubricMetadata // Part of RubricDefinition
+} from '../../../types/index.ts';
+
+// Lines 22-80 (original local interface definitions) have been removed.
 
 // Define the structure of a Rubric
 interface ScoringDetail {
@@ -69,9 +81,17 @@ interface Rubric {
 
 // GET handler to fetch all rubrics
 export async function GET(request: Request) {
+  console.log('GET /api/rubrics called');
   try {
+    console.time('rubricApiConnectDb');
     const { db } = await connectToDatabase();
+    console.timeEnd('rubricApiConnectDb');
+
+    console.time('rubricApiFetchRubrics');
     const rubrics = await db.collection<Rubric>('rubrics').find({}).toArray();
+    console.timeEnd('rubricApiFetchRubrics');
+
+    console.log(`Found ${rubrics.length} rubrics.`);
     return NextResponse.json({ rubrics }, { status: 200 });
   } catch (error) {
     console.error('Failed to fetch rubrics:', error);
@@ -81,7 +101,6 @@ export async function GET(request: Request) {
 
 // POST handler to create a new rubric
 export async function POST(request: Request) {
-  // 1. Check for Admin Secret
   const adminSecret = process.env.ADMIN_SECRET;
   const requestSecret = request.headers.get('X-Admin-Secret');
 
@@ -89,7 +108,6 @@ export async function POST(request: Request) {
     console.error('ADMIN_SECRET is not configured on the server.');
     return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
   }
-
   if (requestSecret !== adminSecret) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -97,7 +115,6 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     
-    // Validate required fields (name, definition) and optional (systemPrompt)
     if (!body.name || typeof body.name !== 'string' || !body.definition) {
       return NextResponse.json({ error: 'Missing or invalid name or definition in request body' }, { status: 400 });
     }
@@ -105,14 +122,13 @@ export async function POST(request: Request) {
          return NextResponse.json({ error: 'Invalid systemPrompt field, must be a string if provided' }, { status: 400 });
     }
 
-    // TODO: Add more detailed validation for body.definition structure against RubricDefinition if needed
     const { name, definition, systemPrompt } = body as { name: string; definition: RubricDefinition; systemPrompt?: string };
 
     const { db } = await connectToDatabase();
     const newRubric: Omit<Rubric, '_id'> = {
       name,
       definition,
-      systemPrompt, // Include systemPrompt (will be undefined if not provided)
+      systemPrompt,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
