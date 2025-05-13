@@ -291,7 +291,7 @@ export function Conversation() {
     setTimeout(() => {
         scoreCurrentSession(); 
     }, 3000); 
-  }, [conversation, router, scoreCurrentSession]);
+  }, [conversation, scoreCurrentSession]);
 
   return (
     <div className="flex flex-col items-center gap-4 w-full conversation-container pt-2 pb-6 px-6">

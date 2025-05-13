@@ -3,6 +3,8 @@
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { ChatBubbleIcon } from './ChatBubbleIcon';
+import { AskLoopieSidebar } from './AskLoopieSidebar';
 
 // Minimal interfaces for data fetched - align with api/results/[sessionId]/route.ts
 interface ScoreItem {
@@ -51,13 +53,16 @@ const DownloadIcon = () => (
 export default function ResultsPage() {
   const params = useParams();
   const sessionId = params.sessionId as string;
+  console.log("ResultsPage - sessionId from URL params:", sessionId);
   const [resultData, setResultData] = useState<ResultData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [isTranscriptModalOpen, setIsTranscriptModalOpen] = useState<boolean>(false); // State for modal
+  const [isTranscriptModalOpen, setIsTranscriptModalOpen] = useState<boolean>(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
 
   useEffect(() => {
     if (sessionId) {
+      console.log("ResultsPage - useEffect (fetchResults) using sessionId:", sessionId);
       const fetchResults = async () => {
         setIsLoading(true);
         setError(null);
@@ -93,7 +98,6 @@ export default function ResultsPage() {
     }
   };
 
-  // Helper to get color for recommendation
   const getRecommendationColor = (recommendation: string | undefined) => {
     if (!recommendation) return 'text-gray-700';
     switch (recommendation) {
@@ -165,7 +169,7 @@ export default function ResultsPage() {
         <hr className="my-6 border-gray-200"/>
 
         <section className="mb-10">
-          <h2 className="text-xl font-semibold text-gray-700 mb-6">Here's How You Did Across Key Skills</h2>
+          <h2 className="text-xl font-semibold text-gray-700 mb-6">Here&apos;s How You Did Across Key Skills</h2>
           <div className="space-y-8">
             {scoreData.llmResponse?.scores?.map((item: ScoreItem, index: number) => (
               <div key={index}>
@@ -201,7 +205,7 @@ export default function ResultsPage() {
                 {/* Display Exemplar Response Suggestion */}
                 {item.score !== null && item.score < 4 && item.feedback?.exemplar_response_suggestion && (
                   <div className="mt-3 pt-3 border-t border-dashed border-gray-300">
-                    <h4 className="text-sm font-medium text-indigo-600 mb-1">💡 Here's what a great response might look like:</h4>
+                    <h4 className="text-sm font-medium text-indigo-600 mb-1">💡 Here&apos;s what a great response might look like:</h4>
                     <p className="text-sm text-gray-600 italic">{item.feedback.exemplar_response_suggestion}</p>
                   </div>
                 )}
@@ -276,6 +280,13 @@ export default function ResultsPage() {
           </div>
         </div>
       )}
+
+      <ChatBubbleIcon onClick={() => setIsSidebarOpen(true)} />
+      <AskLoopieSidebar 
+        isOpen={isSidebarOpen} 
+        onClose={() => setIsSidebarOpen(false)} 
+        sessionId={sessionId} 
+      />
     </div>
   );
 } 

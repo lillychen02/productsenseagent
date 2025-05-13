@@ -125,4 +125,19 @@ export interface ClientResultData {
   rubricDefinition?: RubricDefinition; // Rubric definition is now also fetched
   transcriptText: string;
   audioDownloadUrl: string | null;
+}
+
+// --- Chat Feature Related Interfaces ---
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+}
+
+export interface ChatSession {
+  _id?: ObjectId; // From mongodb
+  sessionId: string;
+  messages: ChatMessage[];
+  createdAt: Date;
+  updatedAt: Date;
 } 
