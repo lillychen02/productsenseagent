@@ -15,8 +15,8 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
-      <body className={`${inter.className} bg-gray-50`}>
+    <html lang="en" className="bg-white">
+      <body className={`${inter.className} bg-white`}>
         <header className="py-4 px-6 sm:px-8 w-full bg-white shadow-sm">
           <div className="flex items-baseline">
             <h1 className="text-2xl font-bold text-indigo-600">Loopie</h1>

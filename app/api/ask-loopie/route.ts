@@ -97,9 +97,11 @@ export async function POST(request: NextRequest) {
     }
     console.log("[API POST /api/ask-loopie] Mongoose connection readyState:", mongoose.connection.readyState);
 
-    // --- Fetch Interview Context --- 
-    console.log(`[API POST /api/ask-loopie] Fetching score data for ${sessionId}...`);
-    const scoreData = await ScoreModel.findOne({ sessionId }).lean<StoredScore>();
+    // --- Fetch LATEST Interview Context using Mongoose Models --- 
+    console.log(`[API POST /api/ask-loopie] Fetching latest score data for ${sessionId}...`);
+    const scoreData = await ScoreModel.findOne({ sessionId })
+                                  .sort({ scoredAt: -1 }) // Sort by scoredAt descending
+                                  .lean<StoredScore>();    // Get the latest one
     console.log(`[API POST /api/ask-loopie] Score data found for ${sessionId}: ${scoreData ? 'Yes' : 'No'}`);
     
     let rubric: Rubric | null = null;
@@ -124,38 +126,15 @@ export async function POST(request: NextRequest) {
 
     // --- Prepare messages for LLM (UPDATED system prompt) --- 
     const interviewContext = formatContextForLLM(scoreData, rubric);
-    const systemPrompt = `
-You are Loopie, a warm, sharp, and encouraging AI coach helping users grow from product sense interviews.
+    const systemPrompt = `You are Loopie, a warm and insightful product sense coach.
 
-You have access to the interview transcript, rubric, scores, and coach-written feedback. The user is now asking a follow-up question about their interview.
+A candidate just completed a product sense interview. You have access to the prompt, transcript, rubric, scores, and coach-written feedback.
 
-Your job is to respond with specific, contextual coaching — always grounded in what the user said or did in the interview.
+Your job is to help them improve by offering *clear, thoughtful, and actionable coaching*. You may organize your answer however you like — use headings, bullets, or narrative style, as long as it's warm, specific, and helpful.
 
-🎯 NEVER answer in a generic way.  
-✅ ALWAYS quote or paraphrase the user's actual response from the interview.  
-✅ If the user's question is vague, infer what they meant based on the transcript and coach them anyway.  
-✅ Stay warm, but don't over-explain. Be smart and surgical.
+Start by highlighting 1–2 things they did well, then explain what could be stronger. Ground your advice in the actual interview context — don't generalize.
 
----
-
-Respond using this structure:
-
-In one sentence, clearly and specifically answer the user's question.
-
-🎯 **What You Did Well**  
-Mention something the user said or did in the interview that shows good instincts related to their question. Quote or summarize their words.
-
-🧠 **What Could Be Stronger**  
-Call out what was weak or missing. Tie it directly to what they said. Don't give abstract advice.
-
-🚀 **Try This Next Time**  
-Share 2–3 sharp, practical suggestions that are relevant to this specific case. Use examples, phrasing, or frameworks.
-
-End with one thoughtful question that encourages the user to reflect further or iterate on their answer.
-
----
-
-Keep your response under 300 words. Use Markdown for formatting. Be punchy, smart, and specific — like a great coach who just watched their interview.
+Always assume positive intent. Be sharp, kind, and surgical.
 
 INTERVIEW CONTEXT:
 ${interviewContext}
@@ -185,7 +164,7 @@ ${interviewContext}
 
     // --- Call LLM --- 
     console.log(`[API POST /api/ask-loopie] Calling OpenAI for ${sessionId}...`);
-    const llmModel = 'gpt-4o-2024-08-06';
+    const llmModel = 'chatgpt-4o-latest';
     let assistantResponseContent = 'Sorry, I encountered an error trying to respond.';
     let llmChoice;
 
@@ -193,7 +172,7 @@ ${interviewContext}
       const completion = await openai.chat.completions.create({
         model: llmModel,
         messages: messagesForLLM as any,
-        temperature: 0,
+        temperature: 0.7,
       });
       llmChoice = completion.choices[0];
       assistantResponseContent = llmChoice?.message?.content || assistantResponseContent;

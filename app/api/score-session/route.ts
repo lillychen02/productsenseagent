@@ -151,7 +151,7 @@ export async function POST(request: Request) {
 
     const userPrompt = `Please evaluate the following interview transcript against the provided rubric.\n\n**Rubric: ${rubric.name}**\nRubric Definition (note 'evaluation_criteria' is an array of dimensions):\n${JSON.stringify(rubric.definition, null, 2)}\n\n**Interview Transcript:**\n${fullTranscript}\n\nProvide your evaluation ONLY in the specified JSON format, ensuring a score item for each dimension in 'evaluation_criteria'.`;
 
-    const llmModel = 'gpt-4o-2024-08-06';
+    const llmModel = 'chatgpt-4o-latest';
 
     console.log(`Calling OpenAI with model ${llmModel} using ${rubric.systemPrompt ? 'custom' : 'default'} system prompt.`);
     const completion = await openai.chat.completions.create({

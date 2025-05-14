@@ -4,18 +4,23 @@
 
 :root {
   --foreground-rgb: 40, 40, 40;
-  --background-start-rgb: 240, 240, 245;
-  --background-end-rgb: 255, 255, 255;
+  /* --background-start-rgb: 240, 240, 245; */
+  /* --background-end-rgb: 255, 255, 255; */
 }
 
 body {
   color: rgb(var(--foreground-rgb));
+  /* 
   background: linear-gradient(
       to bottom,
       rgb(var(--background-start-rgb)),
       rgb(var(--background-end-rgb))
     );
-  min-height: 100vh;
+  */ /* Gradient background removed to allow Tailwind bg-white on body to take effect */
+  min-height: 100vh; /* Keep min-height */
+  /* Ensure no default margins/paddings if not already reset by Tailwind base */
+  margin: 0;
+  padding: 0;
 }
 
 .conversation-container {

@@ -5,12 +5,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ChatMessage } from '@/types';
 import ReactMarkdown from 'react-markdown';
 
-// Simple Loopie Icon (Placeholder - replace with your actual SVG or component)
-const LoopieIcon = () => (
-  <div className="w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center text-white text-sm font-semibold mr-2 flex-shrink-0">
-    <span>L</span>
-  </div>
-);
+// Simple Loopie Icon (Placeholder - can be kept or removed if no longer used anywhere)
+// const LoopieIcon = () => (
+//   <div className="w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center text-white text-sm font-semibold mr-2 flex-shrink-0">
+//     <span>L</span>
+//   </div>
+// );
 
 // Thinking Indicator Component
 const ThinkingIndicator = () => (
@@ -157,14 +157,14 @@ export const AskLoopieSidebar: React.FC<AskLoopieSidebarProps> = ({
           animate={{ x: 0 }}
           exit={{ x: '100%' }}
           transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-          className="fixed top-0 right-0 h-full w-full max-w-md bg-gray-50 shadow-xl z-50 flex flex-col"
+          className="fixed top-0 right-0 h-full w-full max-w-lg bg-gray-100 shadow-xl z-50 flex flex-col"
           role="dialog"
           aria-modal="true"
           aria-labelledby="ask-loopie-title"
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
-            <h2 id="ask-loopie-title" className="text-lg font-semibold text-gray-800">Ask Loopie</h2>
+          <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-100">
+            <h2 id="ask-loopie-title" className="text-lg font-semibold text-indigo-600">Ask Loopie</h2>
             <button 
               onClick={onClose} 
               className="text-gray-500 hover:text-gray-700 p-1 rounded-full hover:bg-gray-100"
@@ -177,7 +177,7 @@ export const AskLoopieSidebar: React.FC<AskLoopieSidebarProps> = ({
           </div>
 
           {/* Message List Area */}
-          <div className="flex-grow p-4 overflow-y-auto space-y-4 bg-gray-50">
+          <div className="flex-grow p-4 overflow-y-auto space-y-4 bg-gray-100">
             {isLoading && messages.length === 0 && (
               <p className="text-center text-gray-500">Loading chat history...</p>
             )}
@@ -186,12 +186,11 @@ export const AskLoopieSidebar: React.FC<AskLoopieSidebarProps> = ({
             )}
             {messages.map((msg, index) => (
               <div key={index} className={`flex items-end ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                {msg.role === 'assistant' && <LoopieIcon />}
                 <div 
-                  className={`prose prose-sm max-w-[80%] px-4 py-2 rounded-lg shadow ${ 
+                  className={`prose prose-sm px-4 py-2 rounded-lg ${ // Base classes for padding, rounding
                     msg.role === 'user' 
-                      ? 'bg-blue-500 text-white rounded-br-none' 
-                      : 'bg-gray-200 text-gray-800 rounded-bl-none'
+                      ? 'bg-gray-200 text-gray-800 rounded-br-none shadow max-w-[80%]'  // User: specific bg, shadow, and max-width
+                      : 'text-gray-800 rounded-bl-none w-full' // Assistant: text color, full width, no explicit bg or shadow
                   }`}
                 >
                   <ReactMarkdown
@@ -209,8 +208,8 @@ export const AskLoopieSidebar: React.FC<AskLoopieSidebarProps> = ({
             ))}
             {isThinking && (
               <div className="flex items-end justify-start">
-                <LoopieIcon />
-                <div className="max-w-[80%] px-4 py-2 rounded-lg shadow bg-gray-200 text-gray-800 rounded-bl-none">
+                <div className="px-4 py-2 rounded-lg text-gray-800 rounded-bl-none w-full">
+                  {/* Thinking indicator also full width */}
                   <ThinkingIndicator />
                 </div>
               </div>
@@ -219,26 +218,26 @@ export const AskLoopieSidebar: React.FC<AskLoopieSidebarProps> = ({
           </div>
 
           {/* Input Bar Area */}
-          <form 
-             className="p-4 border-t border-gray-200 bg-gray-50"
-             onSubmit={(e) => { 
-                e.preventDefault(); 
-                handleSendMessage(); 
-             }}
-          >
-            <div className="flex items-center gap-2">
+          <div className="p-4 border-t border-gray-200 bg-gray-100">
+            <form 
+               className="flex items-center gap-2"
+               onSubmit={(e) => { 
+                  e.preventDefault(); 
+                  handleSendMessage(); 
+               }}
+            >
               <input 
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Ask about your feedback..."
-                className="flex-grow px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                className="flex-grow px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent text-sm"
                 disabled={isLoading} // Disable input while loading/sending
               />
               <button 
                 type="submit"
                 disabled={!input.trim() || isLoading}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+                className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-1 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
               >
                 {isLoading ? (
                   <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -251,11 +250,11 @@ export const AskLoopieSidebar: React.FC<AskLoopieSidebarProps> = ({
                   </svg>
                 )}
               </button>
-            </div>
+            </form>
             {error && (
               <p className="text-red-500 text-xs mt-1.5">{error}</p>
             )}
-          </form>
+          </div>
         </motion.aside>
       )}
     </AnimatePresence>

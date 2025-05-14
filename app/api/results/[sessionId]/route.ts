@@ -77,9 +77,12 @@ export async function GET(
   try {
     const { db } = await connectToDatabase();
 
-    // 1. Fetch the score for the session
-    // Assuming only one score document per session for simplicity here
-    const scoreData = await db.collection<StoredScore>('scores').findOne({ sessionId });
+    // 1. Fetch the LATEST score for the session
+    const scoreData = await db.collection<StoredScore>('scores')
+                            .find({ sessionId })
+                            .sort({ scoredAt: -1 }) // Sort by scoredAt descending
+                            .limit(1)               // Take the first one (latest)
+                            .next();                // Use next() instead of toArray().findOne()
 
     if (!scoreData) {
       return NextResponse.json({ error: 'Score not found for this session' }, { status: 404 });
