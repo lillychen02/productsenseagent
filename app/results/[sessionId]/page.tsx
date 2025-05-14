@@ -3,6 +3,8 @@
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { ChatBubbleIcon } from './ChatBubbleIcon';
+import { AskLoopieSidebar } from './AskLoopieSidebar';
 
 // Minimal interfaces for data fetched - align with api/results/[sessionId]/route.ts
 interface ScoreItem {
@@ -51,13 +53,16 @@ const DownloadIcon = () => (
 export default function ResultsPage() {
   const params = useParams();
   const sessionId = params.sessionId as string;
+  console.log("ResultsPage - sessionId from URL params:", sessionId);
   const [resultData, setResultData] = useState<ResultData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [isTranscriptModalOpen, setIsTranscriptModalOpen] = useState<boolean>(false); // State for modal
+  const [isTranscriptModalOpen, setIsTranscriptModalOpen] = useState<boolean>(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
 
   useEffect(() => {
     if (sessionId) {
+      console.log("ResultsPage - useEffect (fetchResults) using sessionId:", sessionId);
       const fetchResults = async () => {
         setIsLoading(true);
         setError(null);
@@ -93,7 +98,6 @@ export default function ResultsPage() {
     }
   };
 
-  // Helper to get color for recommendation
   const getRecommendationColor = (recommendation: string | undefined) => {
     if (!recommendation) return 'text-gray-700';
     switch (recommendation) {
@@ -138,105 +142,114 @@ export default function ResultsPage() {
 
   const { scoreData, transcriptText, audioDownloadUrl } = resultData;
 
+  // Define sidebar width - Tailwind's max-w-lg is 32rem (512px)
+  const SIDEBAR_WIDTH_CLASS = "md:mr-[32rem]"; // Changed from 28rem to 32rem
+  // const SIDEBAR_WIDTH_PX = 512; // Approximate pixel value if needed
+
   return (
-    <div className="min-h-screen bg-white py-12 px-4 sm:px-6 lg:px-8 font-sans">
-      <main className="max-w-2xl mx-auto bg-white p-8 sm:p-10">
-        <header className="mb-8 pb-6 border-b border-gray-200">
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Your Interview Feedback</h1>
-          <div className="text-sm text-gray-500 space-y-1 mt-2">
-            <p><span className="font-medium">Interview:</span> {scoreData.rubricName || 'N/A'}, {new Date(scoreData.scoredAt).toLocaleString()}</p>
-          </div>
-        </header>
+    // Removed pt-4 from the outermost container
+    <div className={`min-h-screen bg-white font-sans transition-all duration-300 ease-in-out ${isSidebarOpen ? SIDEBAR_WIDTH_CLASS : 'mr-0'} pb-12 px-4 sm:px-6 lg:px-8`}>
+      {/* Inner content wrapper: only horizontal padding */}
+      <div className="px-4 sm:px-6 lg:px-8">
+        {/* Main content block: pt-2 px-8 pb-8 sm:pt-4 sm:px-10 sm:pb-10 */}
+        <main className={`max-w-2xl ${isSidebarOpen ? 'mx-0' : 'mx-auto'} bg-white pt-2 px-8 pb-8 sm:pt-4 sm:px-10 sm:pb-10`}>
+          <header className="mb-8 pb-6 border-b border-gray-200">
+            <h1 className="text-3xl font-bold text-gray-800 mb-2">Your Interview Feedback</h1>
+            <div className="text-sm text-gray-500 space-y-1 mt-2">
+              <p><span className="font-medium">Interview:</span> {scoreData.rubricName || 'N/A'}, {new Date(scoreData.scoredAt).toLocaleString()}</p>
+            </div>
+          </header>
 
-        <section className="mb-10">
-          <h2 className="text-xl font-semibold text-gray-700 mb-2">
-            <span className="text-gray-800">Recommendation: </span>
-            <span className={`${getRecommendationColor(scoreData.llmResponse?.overall_recommendation)}`}>
-              {scoreData.llmResponse?.overall_recommendation || 'N/A'}
-            </span>
-          </h2>
-          {scoreData.llmResponse?.summary_feedback && (
-            <p className="text-base text-gray-600 leading-relaxed mt-1">
-              {scoreData.llmResponse.summary_feedback}
-            </p>
-          )}
-        </section>
-
-        <hr className="my-6 border-gray-200"/>
-
-        <section className="mb-10">
-          <h2 className="text-xl font-semibold text-gray-700 mb-6">Here's How You Did Across Key Skills</h2>
-          <div className="space-y-8">
-            {scoreData.llmResponse?.scores?.map((item: ScoreItem, index: number) => (
-              <div key={index}>
-                <div className="flex justify-between items-baseline mb-2">
-                  <h3 className="text-lg font-semibold text-gray-800">{item.dimension}</h3>
-                  <span className={`text-lg font-bold ${item.score === null ? 'text-gray-500' : item.score >=3 ? (item.score === 4 ? 'text-green-600' : 'text-blue-600') : 'text-yellow-600'}`}>
-                     {item.score !== null ? `${item.score}/4` : 'N/A'}
-                  </span>
-                </div>
-                
-                {item.feedback?.strengths && item.feedback.strengths.length > 0 && item.feedback.strengths[0] !== "This dimension was not reached in the interview." && (
-                  <div className="mt-2 mb-3">
-                    <h4 className="text-md font-semibold text-gray-700 mb-1">Strengths:</h4>
-                    <ul className="list-disc list-outside text-gray-600 space-y-1">
-                      {item.feedback.strengths.map((strength, sIdx) => (
-                        <li key={`s-${index}-${sIdx}`} className="ml-5">{strength}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {item.feedback?.weaknesses && item.feedback.weaknesses.length > 0 && item.feedback.weaknesses[0] !== "This dimension was not reached in the interview." && (
-                  <div className="mt-2 mb-3">
-                    <h4 className="text-md font-semibold text-gray-700 mb-1">Weaknesses:</h4>
-                    <ul className="list-disc list-outside text-gray-600 space-y-1">
-                      {item.feedback.weaknesses.map((weakness, wIdx) => (
-                        <li key={`w-${index}-${wIdx}`} className="ml-5">{weakness}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* Display Exemplar Response Suggestion */}
-                {item.score !== null && item.score < 4 && item.feedback?.exemplar_response_suggestion && (
-                  <div className="mt-3 pt-3 border-t border-dashed border-gray-300">
-                    <h4 className="text-sm font-medium text-indigo-600 mb-1">💡 Here's what a great response might look like:</h4>
-                    <p className="text-sm text-gray-600 italic">{item.feedback.exemplar_response_suggestion}</p>
-                  </div>
-                )}
-
-                {(item.feedback?.strengths?.[0] === "This dimension was not reached in the interview." || item.feedback?.weaknesses?.[0] === "This dimension was not reached in the interview.") && (
-                   <p className="text-gray-500 italic mt-2">This dimension was not reached in the interview.</p>
-                )}
-                {index < (scoreData.llmResponse.scores.length -1) &&  <hr className="mt-4 border-gray-200"/>}
-              </div>
-            ))}
-            {(!scoreData.llmResponse?.scores || scoreData.llmResponse.scores.length === 0) && (
-              <p className="text-gray-500 italic">No detailed dimension scores available.</p>
+          <section className="mb-10">
+            <h2 className="text-xl font-semibold text-gray-700 mb-2">
+              <span className="text-gray-800">Recommendation: </span>
+              <span className={`${getRecommendationColor(scoreData.llmResponse?.overall_recommendation)}`}>
+                {scoreData.llmResponse?.overall_recommendation || 'N/A'}
+              </span>
+            </h2>
+            {scoreData.llmResponse?.summary_feedback && (
+              <p className="text-base text-gray-600 leading-relaxed mt-1">
+                {scoreData.llmResponse.summary_feedback}
+              </p>
             )}
-          </div>
-        </section>
-        
-        <section className="py-8">
-          <div className="flex justify-center items-center">
-            <button
-              onClick={() => setIsTranscriptModalOpen(true)}
-              disabled={!transcriptText}
-              title="View Transcript"
-              className="p-3 text-gray-600 bg-gray-100 rounded-full hover:bg-gray-200 focus:ring-4 focus:ring-gray-300 disabled:bg-gray-300 disabled:text-gray-400 transition-colors shadow-md"
-            >
-              <DocumentIcon />
-            </button>
-          </div>
-        </section>
+          </section>
 
-        <footer className="mt-8 pt-8 border-t border-gray-200 text-center">
-          <Link href="/" className="text-blue-600 hover:text-blue-800 hover:underline">
-            &larr; Start New Interview
-          </Link>
-        </footer>
-      </main>
+          <hr className="my-6 border-gray-200"/>
+
+          <section className="mb-10">
+            <h2 className="text-xl font-semibold text-gray-700 mb-6">Here&apos;s How You Did Across Key Skills</h2>
+            <div className="space-y-8">
+              {scoreData.llmResponse?.scores?.map((item: ScoreItem, index: number) => (
+                <div key={index}>
+                  <div className="flex justify-between items-baseline mb-2">
+                    <h3 className="text-lg font-semibold text-gray-800">{item.dimension}</h3>
+                    <span className={`text-lg font-bold ${item.score === null ? 'text-gray-500' : item.score >=3 ? (item.score === 4 ? 'text-green-600' : 'text-blue-600') : 'text-yellow-600'}`}>
+                       {item.score !== null ? `${item.score}/4` : 'N/A'}
+                    </span>
+                  </div>
+                  
+                  {item.feedback?.strengths && item.feedback.strengths.length > 0 && item.feedback.strengths[0] !== "This dimension was not reached in the interview." && (
+                    <div className="mt-2 mb-3">
+                      <h4 className="text-md font-semibold text-gray-700 mb-1">Strengths:</h4>
+                      <ul className="list-disc list-outside text-gray-600 space-y-1">
+                        {item.feedback.strengths.map((strength, sIdx) => (
+                          <li key={`s-${index}-${sIdx}`} className="ml-5">{strength}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {item.feedback?.weaknesses && item.feedback.weaknesses.length > 0 && item.feedback.weaknesses[0] !== "This dimension was not reached in the interview." && (
+                    <div className="mt-2 mb-3">
+                      <h4 className="text-md font-semibold text-gray-700 mb-1">Weaknesses:</h4>
+                      <ul className="list-disc list-outside text-gray-600 space-y-1">
+                        {item.feedback.weaknesses.map((weakness, wIdx) => (
+                          <li key={`w-${index}-${wIdx}`} className="ml-5">{weakness}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Display Exemplar Response Suggestion */}
+                  {item.score !== null && item.score < 4 && item.feedback?.exemplar_response_suggestion && (
+                    <div className="mt-3 pt-3 border-t border-dashed border-gray-300">
+                      <h4 className="text-sm font-medium text-indigo-600 mb-1">💡 Here&apos;s what a great response might look like:</h4>
+                      <p className="text-sm text-gray-600 italic">{item.feedback.exemplar_response_suggestion}</p>
+                    </div>
+                  )}
+
+                  {(item.feedback?.strengths?.[0] === "This dimension was not reached in the interview." || item.feedback?.weaknesses?.[0] === "This dimension was not reached in the interview.") && (
+                     <p className="text-gray-500 italic mt-2">This dimension was not reached in the interview.</p>
+                  )}
+                  {index < (scoreData.llmResponse.scores.length -1) &&  <hr className="mt-4 border-gray-200"/>}
+                </div>
+              ))}
+              {(!scoreData.llmResponse?.scores || scoreData.llmResponse.scores.length === 0) && (
+                <p className="text-gray-500 italic">No detailed dimension scores available.</p>
+              )}
+            </div>
+          </section>
+          
+          <section className="py-8">
+            <div className="flex justify-center items-center">
+              <button
+                onClick={() => setIsTranscriptModalOpen(true)}
+                disabled={!transcriptText}
+                title="View Transcript"
+                className="p-3 text-gray-600 bg-gray-100 rounded-full hover:bg-gray-200 focus:ring-4 focus:ring-gray-300 disabled:bg-gray-300 disabled:text-gray-400 transition-colors shadow-md"
+              >
+                <DocumentIcon />
+              </button>
+            </div>
+          </section>
+
+          <footer className="mt-8 pt-8 border-t border-gray-200 text-center">
+            <Link href="/" className="text-blue-600 hover:text-blue-800 hover:underline">
+              &larr; Start New Interview
+            </Link>
+          </footer>
+        </main>
+      </div>
 
       {/* Transcript Modal */}
       {isTranscriptModalOpen && resultData?.transcriptText && (
@@ -276,6 +289,14 @@ export default function ResultsPage() {
           </div>
         </div>
       )}
+
+      {/* Ask Loopie Chat Components - Sidebar itself is position: fixed, so it doesn't affect this layout flow directly */}
+      <ChatBubbleIcon onClick={() => setIsSidebarOpen(true)} />
+      <AskLoopieSidebar 
+        isOpen={isSidebarOpen} 
+        onClose={() => setIsSidebarOpen(false)} 
+        sessionId={sessionId} 
+      />
     </div>
   );
 } 
