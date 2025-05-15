@@ -150,8 +150,9 @@ export async function POST(request: NextRequest) {
     console.log(`[WEBHOOK DECISION] Condition 2 (endReason exists): ${!!endReason}`);
     console.log(`[WEBHOOK DECISION] Condition 3 (appropriateEndReasons includes endReason): ${endReason && appropriateEndReasons.includes(endReason.toLowerCase())}`);
 
-    if (callStatus === 'done' && endReason && appropriateEndReasons.includes(endReason.toLowerCase())) {
-      console.log(`[WEBHOOK ACTION] Conditions MET for session ${webhookSessionIdFromPayload}. Triggering scoring with rubricId: ${rubricIdToUse}.`);
+    // Simplified condition: Score if callStatus is 'done', regardless of endReason
+    if (callStatus === 'done') {
+      console.log(`[WEBHOOK ACTION] Conditions MET for session ${webhookSessionIdFromPayload} (callStatus is 'done'). Triggering scoring with rubricId: ${rubricIdToUse}. End Reason was: '${endReason}'`);
       
       const baseUrl = process.env.NODE_ENV === 'development' 
         ? 'http://localhost:3000' 
@@ -199,7 +200,7 @@ export async function POST(request: NextRequest) {
       });
       return NextResponse.json({ message: 'Webhook received, scoring triggered.' }, { status: 200 });
     } else {
-      console.log(`[WEBHOOK ACTION] Conditions NOT MET for session ${webhookSessionIdFromPayload}. Scoring not triggered.`);
+      console.log(`[WEBHOOK ACTION] Conditions NOT MET for session ${webhookSessionIdFromPayload} (callStatus is '${callStatus}', not 'done'). Scoring not triggered. End Reason was: '${endReason}'`);
       try {
         await db.collection<SessionMetadata>('sessions_metadata').updateOne(
           { sessionId: webhookSessionIdFromPayload }, 

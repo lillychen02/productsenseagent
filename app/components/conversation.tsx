@@ -3,11 +3,27 @@
 import { useConversation } from '@11labs/react';
 import { useCallback, useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
 
 // Helper for timestamped logs
 const logClient = (message: string, ...args: any[]) => {
   console.log(`[${new Date().toISOString()}] [CLIENT] ${message}`, ...args);
 };
+
+// Sound Wave Icon SVG component (from user, simplified for Tailwind styling)
+const SoundWaveIcon = ({ className }: { className?: string }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className={className} aria-hidden="true">
+    {/* Path will inherit fill from parent svg's className */}
+    <path d="M280-240v-480h80v480h-80ZM440-80v-800h80v800h-80ZM120-400v-160h80v160h-80Zm480 160v-480h80v480h-80Zm160-160v-160h80v160h-80Z"/>
+  </svg>
+);
+
+// Phone Disabled Icon SVG component (from user)
+const PhoneDisabledIcon = ({ className = "w-6 h-6", fill = "currentColor" }: { className?: string, fill?: string }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className={className} fill={fill} aria-hidden="true">
+    <path d="M792-52 570-274q-89 72-193.5 113T162-120q-24 0-33-12t-9-30v-162q0-14 9-24.5t23-13.5l138-28q11-2 27.5 3t24.5 13l94 94q18-11 39-25t37-27L56-788l56-56 736 736-56 56ZM360-244l-66-66-94 20v88q41-3 81-14t79-28Zm322-144-56-56q15-17 30.5-39t24.5-41l-97-98q-8-8-11-22.5t-1-23.5l26-140q3-14 13.5-23t24.5-9h162q18 0 30 12t12 30q0 110-42 214.5T682-388Zm36-212q17-39 26-79t14-81h-88l-18 94 66 66Zm0 0ZM360-244Z"/>
+  </svg>
+);
 
 export function Conversation() {
   const router = useRouter();
@@ -302,113 +318,130 @@ export function Conversation() {
     }, 3000); 
   }, [conversation, scoreCurrentSession]);
 
+  const buttonVariants = {
+    hidden: { opacity: 0, scale: 0.9 },
+    visible: { opacity: 1, scale: 1 },
+    exit: { opacity: 0, scale: 0.9, transition: { duration: 0.15 } },
+  };
+
   return (
     <div className="flex flex-col items-center gap-4 w-full conversation-container pt-2 pb-6 px-6">
-      {/* Buttons - Conditional Rendering */}
-      <div className="flex gap-2 justify-center h-12"> {/* Added fixed height to prevent layout shift */}
-        {conversation.status !== 'connected' && !isLoading && !isScoring && (
-          <button
-            onClick={startConversation}
-            disabled={isRubricLoading}
-            className="px-6 py-3 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:bg-gray-400 transition-colors text-base font-medium"
-          >
-            {isRubricLoading ? 'Loading Setup...' : 'Start Interview'}
-          </button>
-        )}
-        {isLoading && (
-          <button
-            disabled
-            className="px-6 py-3 bg-gray-300 text-white rounded-md text-base font-medium"
-          >
-            Connecting...
-          </button>
-        )}
-        {conversation.status === 'connected' && !isScoring && (
-          <button
-            onClick={stopConversation}
-            // disabled={conversation.status !== 'connected' || isScoring}
-            className="px-6 py-3 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors text-base font-medium"
-          >
-            End Interview
-          </button>
-        )}
-        {isScoring && (
-          <button
-            disabled
-            className="px-6 py-3 bg-gray-300 text-white rounded-md text-base font-medium"
-          >
-            Scoring...
-          </button>
-        )}
-      </div>
+      <div className="flex gap-2 justify-center h-12 relative">
+        <AnimatePresence mode='wait' initial={false}>
+          {conversation.status !== 'connected' && !isLoading && !isScoring && (
+            <motion.button
+              key="start-interview"
+              variants={buttonVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              onClick={startConversation}
+              disabled={isRubricLoading}
+              className="p-3 bg-gray-100 rounded-full hover:bg-gray-200 disabled:opacity-50 transition-colors flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+              aria-label="Start your interview (voice only)"
+              title="Start your interview (voice only)"
+            >
+              {isRubricLoading ? (
+                <svg className="animate-spin h-5 w-5 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              ) : (
+                <SoundWaveIcon className="w-14 h-8 fill-indigo-600 hover:fill-indigo-700" />
+              )}
+            </motion.button>
+          )}
 
-      <div className="flex flex-col items-center my-4">
-        <div className="flex items-center gap-4 justify-center">
-          {/* <p className="text-gray-700">Status: <span className="font-medium">{conversation.status}</span></p> -- Removed */}
-          
-          {isTimerRunning && (
-            <div className={`px-3 py-1 bg-gray-100 rounded-full font-medium flex items-center gap-1 ${isTimerRunning ? 'timer-active-glow' : ''}`}>
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          {isLoading && (
+            <motion.button
+              key="connecting"
+              variants={buttonVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              disabled
+              className="p-3 rounded-full flex items-center justify-center bg-gray-100 focus:outline-none"
+              aria-label="Connecting"
+              title="Connecting..."
+            >
+              <svg className="animate-spin h-5 w-5 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-              <span>{formatTime(elapsedTime)}</span>
+            </motion.button>
+          )}
+
+          {conversation.status === 'connected' && !isLoading && !isScoring && (
+            <div className="flex flex-col items-center my-4 gap-y-3">
+              <div className="flex items-center gap-2 justify-center h-6">
+                {conversation.isSpeaking && (
+                  <div className={`px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium flex items-center gap-1 ${isTimerRunning ? 'timer-active-glow' : ''}`}>
+                    <span className="flex h-2 w-2 relative">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                    </span>
+                    Speaking
+                  </div>
+                )}
+                {!conversation.isSpeaking && (
+                  <div className={`px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium flex items-center gap-1 ${isTimerRunning ? 'timer-active-glow' : ''}`}>
+                    <span className="flex h-2 w-2 relative">
+                      <span className="absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                    </span>
+                    Listening
+                  </div>
+                )}
+              </div>
+
+              {isTimerRunning && (
+                <div className={`font-medium flex items-center justify-center h-8 text-gray-700`}>
+                  <span>{formatTime(elapsedTime)}</span>
+                </div>
+              )}
+
+              <motion.button
+                key="end-interview"
+                variants={buttonVariants}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                onClick={stopConversation}
+                className="p-3 bg-red-500 text-white rounded-full hover:bg-red-600 disabled:opacity-50 transition-colors flex items-center justify-center shadow-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                aria-label="End Interview"
+                title="End Interview"
+              >
+                <PhoneDisabledIcon className="w-5 h-5" />
+              </motion.button>
             </div>
           )}
-        </div>
-        
-        <div className="flex items-center gap-2 mt-2 justify-center">
-          {conversation.isSpeaking && !isScoring && (
-            <div className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium flex items-center gap-1">
-              <span className="flex h-2 w-2 relative">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-              </span>
-              Speaking
-            </div>
+
+          {isScoring && (
+            <motion.button
+              key="scoring"
+              variants={buttonVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              disabled
+              className="p-3 bg-gray-100 rounded-full flex items-center justify-center focus:outline-none"
+              aria-label="Scoring"
+              title="Scoring..."
+            >
+              <svg className="animate-spin h-5 w-5 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            </motion.button>
           )}
-          {!conversation.isSpeaking && conversation.status === 'connected' && !isScoring && (
-            <div className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium flex items-center gap-1">
-              <span className="flex h-2 w-2 relative">
-                <span className="absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-              </span>
-              Listening
-            </div>
-          )}
-        </div>
+        </AnimatePresence>
       </div>
 
-      {/* Transcript Display - Commented Out */}
-      {/* 
-      {transcripts.length > 0 && (
-        <div className="w-full mt-2 border rounded-lg overflow-hidden">
-          <div className="bg-gray-50 px-4 py-2 border-b">
-            <h3 className="font-medium">Transcript</h3>
-          </div>
-          <div className="p-4 max-h-80 overflow-y-auto">
-            {transcripts.map((item, index) => (
-              <div key={index} className={`mb-3 p-2 rounded ${
-                item.role === 'interviewer' 
-                ? 'bg-blue-50 border-l-4 border-blue-300' 
-                : 'bg-gray-50 border-l-4 border-gray-300'
-              }`}>
-                <p className="font-semibold mb-1">{item.role === 'interviewer' ? 'Interviewer' : 'You'}</p>
-                <p>{item.content}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      */}
-
-      {/* Score Results Display is REMOVED from here - will be on its own page */}
       {isScoring && !scoreResult && (
         <div className="w-full mt-4 p-4 text-center text-gray-600">
           Scoring interview, please wait...
         </div>
       )}
-      {/* The actual score result display is removed as we will navigate away */}
-
     </div>
   );
 } 
