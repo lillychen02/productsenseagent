@@ -50,6 +50,22 @@ const DownloadIcon = () => (
   </svg>
 );
 
+// Helper function to get emoji for score
+const getScoreEmoji = (score: number | null): string => {
+  if (score === 1) return '🔴';
+  if (score === 2) return '🟡';
+  if (score === 3 || score === 4) return '🟢';
+  return '⚪'; // Default for null or other scores
+};
+
+// Helper function to generate a URL-friendly ID from a skill dimension
+const generateSkillId = (dimension: string): string => {
+  return dimension
+    .toLowerCase()
+    .replace(/\s+/g, '-')       // Replace spaces with hyphens
+    .replace(/[^a-z0-9-]/g, ''); // Remove non-alphanumeric characters except hyphens
+};
+
 export default function ResultsPage() {
   const params = useParams();
   const sessionId = params.sessionId as string;
@@ -104,9 +120,58 @@ export default function ResultsPage() {
       case 'Strong Hire': return 'text-green-600';
       case 'Hire': return 'text-green-500';
       case 'Mixed': return 'text-yellow-500';
-      case 'No Hire': return 'text-red-500';
+      case 'No Hire': return 'text-gray-700';
       default: return 'text-gray-700';
     }
+  };
+
+  const getMotivationalHeader = (recommendation: string | undefined) => {
+    const color = getRecommendationColor(recommendation);
+    if (!recommendation) return { emoji: "", text: "Your Interview Feedback", subtextColorClass: color };
+    switch (recommendation) {
+      case 'No Hire': return { emoji: "🟠", text: "Not Ready Yet — Here's how to level up", subtextColorClass: color };
+      case 'Mixed': return { emoji: "🟡", text: "Almost There — Just a Few More Tweaks", subtextColorClass: color };
+      case 'Hire': return { emoji: "🟢", text: "Great Job — You Nailed It!", subtextColorClass: color };
+      case 'Strong Hire': return { emoji: "🌟", text: "Outstanding — This was a standout performance!", subtextColorClass: color };
+      default: return { emoji: "", text: "Your Interview Feedback", subtextColorClass: color };
+    }
+  };
+
+  const getSkillSummary = (feedback: ScoreItem['feedback']): string => {
+    const maxLength = 70;
+    let summaryText = "";
+
+    const actualStrengths = feedback.strengths?.filter(
+      s => s !== "Not reached."
+    );
+
+    if (actualStrengths && actualStrengths.length > 0) {
+      summaryText = actualStrengths[0];
+    } else {
+      const actualWeaknesses = feedback.weaknesses?.filter(
+        w => w !== "Not reached."
+      );
+      if (actualWeaknesses && actualWeaknesses.length > 0) {
+        summaryText = actualWeaknesses[0];
+      } else {
+        // Check if the original arrays primarily indicated "not reached"
+        const strengthsIndicatedNotReached = feedback.strengths?.length === 1 && feedback.strengths[0] === "Not reached.";
+        const weaknessesIndicatedNotReached = feedback.weaknesses?.length === 1 && feedback.weaknesses[0] === "Not reached.";
+        
+        // If either array exclusively said "not reached" and the other was empty or also exclusively said "not reached"
+        if ( (strengthsIndicatedNotReached && (!feedback.weaknesses || feedback.weaknesses.length === 0 || weaknessesIndicatedNotReached)) || 
+             (weaknessesIndicatedNotReached && (!feedback.strengths || feedback.strengths.length === 0 || strengthsIndicatedNotReached)) ) {
+          return "Not reached.";
+        } else {
+          return "No specific summary points provided.";
+        }
+      }
+    }
+
+    if (summaryText.length > maxLength) {
+      return summaryText.substring(0, maxLength - 3) + "...";
+    }
+    return summaryText;
   };
 
   if (isLoading) {
@@ -141,6 +206,7 @@ export default function ResultsPage() {
   }
 
   const { scoreData, transcriptText, audioDownloadUrl } = resultData;
+  const motivationalHeaderDetails = getMotivationalHeader(scoreData.llmResponse?.overall_recommendation);
 
   // Define sidebar width - Tailwind's max-w-lg is 32rem (512px)
   const SIDEBAR_WIDTH_CLASS = "md:mr-[32rem]"; // Changed from 28rem to 32rem
@@ -152,74 +218,115 @@ export default function ResultsPage() {
       {/* Inner content wrapper: only horizontal padding */}
       <div className="px-4 sm:px-6 lg:px-8">
         {/* Main content block: pt-2 px-8 pb-8 sm:pt-4 sm:px-10 sm:pb-10 */}
-        <main className={`max-w-2xl ${isSidebarOpen ? 'mx-0' : 'mx-auto'} bg-white pt-2 px-8 pb-8 sm:pt-4 sm:px-10 sm:pb-10`}>
+        <main className={`max-w-4xl ${isSidebarOpen ? 'mx-0' : 'mx-auto'} bg-white pt-2 px-8 pb-8 sm:pt-4 sm:px-10 sm:pb-10`}>
           <header className="mb-8 pb-6 border-b border-gray-200">
-            <h1 className="text-3xl font-bold text-gray-800 mb-2">Your Interview Feedback</h1>
-            <div className="text-sm text-gray-500 space-y-1 mt-2">
-              <p><span className="font-medium">Interview:</span> {scoreData.rubricName || 'N/A'}, {new Date(scoreData.scoredAt).toLocaleString()}</p>
+            <h1 className="text-3xl font-bold text-gray-800 mb-3">
+              {motivationalHeaderDetails.emoji && <span className="mr-2">{motivationalHeaderDetails.emoji}</span>}
+              {motivationalHeaderDetails.text}
+            </h1>
+            <div className="text-sm text-gray-500 space-y-0.5 mt-2 mb-3">
+              <p>
+                Recommendation: <span className={`font-semibold ${motivationalHeaderDetails.subtextColorClass}`}>
+                  {scoreData.llmResponse?.overall_recommendation || 'N/A'}
+                </span>
+              </p>
+              <p>Date: <span className="font-normal text-gray-600">{new Date(scoreData.scoredAt).toLocaleDateString()}</span></p>
+              <p>Interview Type: <span className="font-normal text-gray-600">{scoreData.rubricName || 'N/A'}</span></p>
             </div>
-          </header>
-
-          <section className="mb-10">
-            <h2 className="text-xl font-semibold text-gray-700 mb-2">
-              <span className="text-gray-800">Recommendation: </span>
-              <span className={`${getRecommendationColor(scoreData.llmResponse?.overall_recommendation)}`}>
-                {scoreData.llmResponse?.overall_recommendation || 'N/A'}
-              </span>
-            </h2>
             {scoreData.llmResponse?.summary_feedback && (
-              <p className="text-base text-gray-600 leading-relaxed mt-1">
+              <p className="text-base text-gray-600 leading-relaxed mt-3">
                 {scoreData.llmResponse.summary_feedback}
               </p>
             )}
-          </section>
+          </header>
 
-          <hr className="my-6 border-gray-200"/>
+          {scoreData.llmResponse?.scores && scoreData.llmResponse.scores.length > 0 && (
+            <section className="mb-8">
+              <h2 className="text-2xl font-bold text-gray-800 mb-4">Your Skills at a Glance</h2>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-3/5">
+                        Skill
+                      </th>
+                      <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-2/5">
+                        Score
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {scoreData.llmResponse.scores.map((item: ScoreItem, index: number) => (
+                      <tr key={`snapshot-${index}`} className={'bg-transparent'}>
+                        <td className="px-4 py-2 text-sm font-medium text-gray-900 w-3/5">
+                          <a 
+                            href={`#${generateSkillId(item.dimension)}`} 
+                            className="text-blue-600 hover:text-blue-800 hover:underline"
+                          >
+                            {item.dimension}
+                          </a>
+                        </td>
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-700 w-2/5">
+                          <span className="mr-1.5">{getScoreEmoji(item.score)}</span>
+                          {item.score !== null ? `${item.score}/4` : 'N/A'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+          <hr className="my-8 border-gray-300"/>
 
           <section className="mb-10">
-            <h2 className="text-xl font-semibold text-gray-700 mb-6">Here&apos;s How You Did Across Key Skills</h2>
+            <h2 className="text-2xl font-bold text-gray-800 mb-6">Deep Dive By Skills</h2>
             <div className="space-y-8">
               {scoreData.llmResponse?.scores?.map((item: ScoreItem, index: number) => (
-                <div key={index}>
-                  <div className="flex justify-between items-baseline mb-2">
-                    <h3 className="text-lg font-semibold text-gray-800">{item.dimension}</h3>
-                    <span className={`text-lg font-bold ${item.score === null ? 'text-gray-500' : item.score >=3 ? (item.score === 4 ? 'text-green-600' : 'text-blue-600') : 'text-yellow-600'}`}>
-                       {item.score !== null ? `${item.score}/4` : 'N/A'}
+                <div key={index} id={generateSkillId(item.dimension)} className="scroll-mt-20">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-3">
+                    {item.dimension}
+                    <span className="ml-2">
+                      {getScoreEmoji(item.score)}
                     </span>
-                  </div>
+                    <span className="text-base font-normal text-gray-600 ml-1">
+                      {item.score !== null ? `${item.score}/4` : 'N/A'}
+                    </span>
+                  </h3>
                   
-                  {item.feedback?.strengths && item.feedback.strengths.length > 0 && item.feedback.strengths[0] !== "This dimension was not reached in the interview." && (
+                  {item.feedback?.strengths && item.feedback.strengths.length > 0 && item.feedback.strengths[0] !== "Not reached." && (
                     <div className="mt-2 mb-3">
-                      <h4 className="text-md font-semibold text-gray-700 mb-1">Strengths:</h4>
+                      <h4 className="text-md font-semibold text-gray-700 mb-1"><span className="mr-1.5">✅</span>What You Did Well</h4>
                       <ul className="list-disc list-outside text-gray-600 space-y-1">
                         {item.feedback.strengths.map((strength, sIdx) => (
-                          <li key={`s-${index}-${sIdx}`} className="ml-5">{strength}</li>
+                          <li key={`s-${index}-${sIdx}`} className="ml-8">{strength}</li>
                         ))}
                       </ul>
                     </div>
                   )}
 
-                  {item.feedback?.weaknesses && item.feedback.weaknesses.length > 0 && item.feedback.weaknesses[0] !== "This dimension was not reached in the interview." && (
+                  {item.feedback?.weaknesses && item.feedback.weaknesses.length > 0 && item.feedback.weaknesses[0] !== "Not reached." && (
                     <div className="mt-2 mb-3">
-                      <h4 className="text-md font-semibold text-gray-700 mb-1">Weaknesses:</h4>
+                      <h4 className="text-md font-semibold text-gray-700 mb-1"><span className="mr-1.5">❌</span>What Could Be Stronger</h4>
                       <ul className="list-disc list-outside text-gray-600 space-y-1">
                         {item.feedback.weaknesses.map((weakness, wIdx) => (
-                          <li key={`w-${index}-${wIdx}`} className="ml-5">{weakness}</li>
+                          <li key={`w-${index}-${wIdx}`} className="ml-8">{weakness}</li>
                         ))}
                       </ul>
                     </div>
                   )}
 
-                  {/* Display Exemplar Response Suggestion */}
+                  {/* Display Exemplar Response Suggestion - Relabelled as Try This Next Time */}
                   {item.score !== null && item.score < 4 && item.feedback?.exemplar_response_suggestion && (
                     <div className="mt-3 pt-3 border-t border-dashed border-gray-300">
-                      <h4 className="text-sm font-medium text-indigo-600 mb-1">💡 Here&apos;s what a great response might look like:</h4>
-                      <p className="text-sm text-gray-600 italic">{item.feedback.exemplar_response_suggestion}</p>
+                      <h4 className="text-md font-semibold text-gray-700 mb-1"><span className="mr-1.5">💡</span>Try This Next Time</h4>
+                      <p className="text-sm text-gray-600 italic ml-7">{item.feedback.exemplar_response_suggestion}</p>
                     </div>
                   )}
 
-                  {(item.feedback?.strengths?.[0] === "This dimension was not reached in the interview." || item.feedback?.weaknesses?.[0] === "This dimension was not reached in the interview.") && (
-                     <p className="text-gray-500 italic mt-2">This dimension was not reached in the interview.</p>
+                  {(item.feedback?.strengths?.[0] === "Not reached." || item.feedback?.weaknesses?.[0] === "Not reached.") && (
+                     <p className="text-gray-500 italic mt-2">Not reached.</p>
                   )}
                   {index < (scoreData.llmResponse.scores.length -1) &&  <hr className="mt-4 border-gray-200"/>}
                 </div>

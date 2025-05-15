@@ -4,6 +4,11 @@ import { useConversation } from '@11labs/react';
 import { useCallback, useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
+// Helper for timestamped logs
+const logClient = (message: string, ...args: any[]) => {
+  console.log(`[${new Date().toISOString()}] [CLIENT] ${message}`, ...args);
+};
+
 export function Conversation() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -153,41 +158,43 @@ export function Conversation() {
 
   const conversation = useConversation({
     onConnect: () => {
-      console.log('ElevenLabs voice agent connected.');
+      logClient('ElevenLabs SDK: onConnect - Voice agent connected.');
       setIsTimerRunning(true);
       setScoreResult(null); // Clear scores on new session
     },
-    onDisconnect: () => {
-      console.log('ElevenLabs voice agent disconnected.');
+    onDisconnect: (reason: any) => {
+      logClient('ElevenLabs SDK: onDisconnect - Voice agent disconnected.', reason || 'No specific reason provided by SDK.');
       setIsTimerRunning(false);
       if (!isScoring) {
         // alert("Interview disconnected."); // Or a more specific message based on context
       }
     },
     onMessage: (message) => {
+      logClient('ElevenLabs SDK: onMessage - Received message.', message);
       const currentSessionIdFromRef = sessionIdRef.current;
       if ((message as any).type === "interruption") {
         const interruptionEvent = message as any;
         const reason = interruptionEvent.interruption_event?.reason || "Unknown interruption";
-        console.log("Interruption occurred:", reason, "SessionId was:", currentSessionIdFromRef);
+        logClient(`ElevenLabs SDK: Interruption occurred - Reason: ${reason}, SessionId: ${currentSessionIdFromRef}`);
         setIsTimerRunning(false);
         alert(`Session interrupted: ${reason}`);
         return;
       }
       if (message && message.message && typeof message.message === 'string') {
         if (!currentSessionIdFromRef) {
-            console.warn('onMessage: sessionId (from ref) is not set yet. Transcript for:', message.message, 'NOT SAVED');
+            logClient('ElevenLabs SDK: onMessage - sessionId (from ref) is not set yet. Transcript for message NOT SAVED.', message.message);
             return;
         }
         const role = message.source === 'ai' ? 'interviewer' : 'candidate';
+        logClient(`ElevenLabs SDK: onMessage - Saving transcript for role: ${role}`);
         saveTranscript(role, message.message);
         setTranscripts(prev => [...prev, {role, content: message.message}]);
       } else {
-        console.warn('Received message without standard content or unknown type:', message);
+        logClient('ElevenLabs SDK: onMessage - Received message without standard content or unknown type.', message);
       }
     },
-    onError: (error) => {
-      console.error('ElevenLabs SDK Error:', error);
+    onError: (error: any) => {
+      logClient('ElevenLabs SDK: onError - An error occurred.', error);
       setIsTimerRunning(false);
       alert(`An SDK error occurred: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setIsScoring(false);
@@ -209,6 +216,7 @@ export function Conversation() {
   };
 
   const startConversation = useCallback(async () => {
+    logClient('startConversation: Initiated.');
     if (isRubricLoading || !defaultRubricId.current || !defaultRubricName.current) {
       alert("Rubric information is still loading or failed to load. Please wait a moment and try again, or refresh the page.");
       return;
@@ -278,6 +286,7 @@ export function Conversation() {
   }, [conversation, defaultRubricId, defaultRubricName, isRubricLoading]);
 
   const stopConversation = useCallback(async () => {
+    logClient('stopConversation: Initiated.');
     const currentSessionId = sessionIdRef.current;
     if (!currentSessionId) {
         console.warn("Attempted to stop conversation but no active session ID (from ref).");
