@@ -3,21 +3,29 @@ import { Conversation } from './components/conversation'
 export default function Home() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-6 bg-white">
-      <div className="w-full max-w-2xl mx-auto flex flex-col items-center">
-        <h1 className="text-3xl font-bold mb-6 text-center bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-blue-800">
-          Interview: Product Sense
+      <div className="w-full max-w-2xl mx-auto flex flex-col items-center text-center">
+        <h1 className="text-3xl sm:text-4xl font-bold mb-3 bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">
+          Product Sense Interview
         </h1>
+        <p className="text-lg sm:text-xl text-gray-600 mb-10">
+          Talk like it&apos;s real. Get coaching that makes you better.
+        </p>
         
-        {/* Introductory Text Block - Further reduced bottom margin */}
-        <div className="mb-4 p-6 bg-white text-gray-700 text-left w-full">
-          <p className="mb-4">
-            You&apos;re about to practice a real product sense interview—with an AI that thinks and speaks like a top-tier PM interviewer.
-          </p>
-          <p className="mb-2 font-semibold">Here&apos;s how it works:</p>
-          <ul className="list-disc list-outside pl-5 mb-4 space-y-1">
-            <li>You&apos;ll respond out loud, just like in a real interview.</li>
-            <li>The AI will help clarify any questions you have.</li>
-            <li>After you&apos;re done, you&apos;ll get a full evaluation— with coaching-style feedback tied to what you actually said.</li>
+        <div className="mb-8 p-6 bg-gray-50 rounded-xl shadow-sm text-left w-full max-w-lg">
+          <h2 className="text-xl font-semibold text-gray-800 mb-4 text-center">How it works:</h2>
+          <ul className="space-y-3 text-gray-700">
+            <li className="flex items-start">
+              <span className="text-indigo-500 mr-3 text-xl">›</span>
+              <span>Speak your answers out loud—just like a real interview</span>
+            </li>
+            <li className="flex items-start">
+              <span className="text-indigo-500 mr-3 text-xl">›</span>
+              <span>The AI will clarify your questions</span>
+            </li>
+            <li className="flex items-start">
+              <span className="text-indigo-500 mr-3 text-xl">›</span>
+              <span>After, get tailored feedback from your coach (Loopie) based on what you said</span>
+            </li>
           </ul>
         </div>
 
