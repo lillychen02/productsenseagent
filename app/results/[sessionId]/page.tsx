@@ -36,10 +36,10 @@ interface ResultData {
   audioDownloadUrl: string | null;
 }
 
-// Document Icon SVG component
-const DocumentIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+// Document Icon SVG component (Updated with user's new SVG for transcripts)
+const DocumentIcon = ({ className = "w-5 h-5", fill = "currentColor" }: { className?: string, fill?: string }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className={className} fill={fill} aria-hidden="true">
+    <path d="M280-280h280v-80H280v80Zm0-160h400v-80H280v80Zm0-160h400v-80H280v80Zm-80 480q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Zm0-560v560-560Z"/>
   </svg>
 );
 
@@ -47,6 +47,13 @@ const DocumentIcon = () => (
 const DownloadIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
     <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+  </svg>
+);
+
+// Retry Icon SVG component (for Start New Interview)
+const RetryIcon = ({ className = "w-5 h-5", fill = "currentColor" }: { className?: string, fill?: string }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className={className} fill={fill} aria-hidden="true">
+    <path d="M480-80q-75 0-140.5-28.5t-114-77q-48.5-48.5-77-114T120-440h80q0 117 81.5 198.5T480-160q117 0 198.5-81.5T760-440q0-117-81.5-198.5T480-720h-6l62 62-56 58-160-160 160-160 56 58-62 62h6q75 0 140.5 28.5t114 77q48.5 48.5 77 114T840-440q0 75-28.5 140.5t-77 114q-48.5 48.5-114 77T480-80Z"/>
   </svg>
 );
 
@@ -215,8 +222,9 @@ export default function ResultsPage() {
   return (
     // Removed pt-4 from the outermost container
     <div className={`min-h-screen bg-white font-sans transition-all duration-300 ease-in-out ${isSidebarOpen ? SIDEBAR_WIDTH_CLASS : 'mr-0'} pb-12 px-4 sm:px-6 lg:px-8`}>
-      {/* Inner content wrapper: only horizontal padding */}
-      <div className="px-4 sm:px-6 lg:px-8">
+      {/* Add padding-bottom to the main content area to account for the fixed footer height */}
+      {/* The value (e.g., pb-24) should be enough to clear the floating action bar */}
+      <div className="px-4 sm:px-6 lg:px-8 pb-24">
         {/* Main content block: pt-2 px-8 pb-8 sm:pt-4 sm:px-10 sm:pb-10 */}
         <main className={`max-w-4xl ${isSidebarOpen ? 'mx-0' : 'mx-auto'} bg-white pt-2 px-8 pb-8 sm:pt-4 sm:px-10 sm:pb-10`}>
           <header className="mb-8 pb-6 border-b border-gray-200">
@@ -336,27 +344,44 @@ export default function ResultsPage() {
               )}
             </div>
           </section>
-          
-          <section className="py-8">
-            <div className="flex justify-center items-center">
-              <button
-                onClick={() => setIsTranscriptModalOpen(true)}
-                disabled={!transcriptText}
-                title="View Transcript"
-                className="p-3 text-gray-600 bg-gray-100 rounded-full hover:bg-gray-200 focus:ring-4 focus:ring-gray-300 disabled:bg-gray-300 disabled:text-gray-400 transition-colors shadow-md"
-              >
-                <DocumentIcon />
-              </button>
-            </div>
-          </section>
-
-          <footer className="mt-8 pt-8 border-t border-gray-200 text-center">
-            <Link href="/" className="text-blue-600 hover:text-blue-800 hover:underline">
-              &larr; Start New Interview
-            </Link>
-          </footer>
         </main>
       </div>
+
+      {/* Fixed Footer Action Bar */}
+      <footer className="fixed bottom-0 left-0 right-0 z-40 bg-transparent pb-4 pt-2">
+        <div className="flex justify-center">
+          <div className="inline-flex items-center justify-center gap-x-3 bg-indigo-600 rounded-full p-2 shadow-lg">
+            {/* View Transcript Button */}
+            <button
+              onClick={() => setIsTranscriptModalOpen(true)}
+              disabled={!transcriptText}
+              title="View Transcript"
+              aria-label="View Transcript"
+              className="p-2 text-white hover:bg-indigo-700 rounded-full disabled:opacity-50 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:ring-offset-2 focus:ring-offset-indigo-600"
+            >
+              <DocumentIcon className="w-5 h-5" fill="currentColor" />
+            </button>
+
+            {/* Ask Loopie Button - Reverted to icon-only */}
+            <ChatBubbleIcon 
+              onClick={() => setIsSidebarOpen(true)}
+              className="p-2 text-white hover:bg-indigo-700 rounded-full disabled:opacity-50 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:ring-offset-2 focus:ring-offset-indigo-600 flex items-center justify-center"
+              title="Ask Loopie"
+              ariaLabel="Ask Loopie"
+            />
+
+            {/* Start New Interview Link/Button */}
+            <Link 
+              href="/"
+              title="Start New Interview"
+              aria-label="Start New Interview"
+              className="p-2 text-white hover:bg-indigo-700 rounded-full disabled:opacity-50 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:ring-offset-2 focus:ring-offset-indigo-600 flex items-center justify-center"
+            >
+              <RetryIcon className="w-5 h-5" fill="currentColor" />
+            </Link>
+          </div>
+        </div>
+      </footer>
 
       {/* Transcript Modal */}
       {isTranscriptModalOpen && resultData?.transcriptText && (
@@ -398,7 +423,6 @@ export default function ResultsPage() {
       )}
 
       {/* Ask Loopie Chat Components - Sidebar itself is position: fixed, so it doesn't affect this layout flow directly */}
-      <ChatBubbleIcon onClick={() => setIsSidebarOpen(true)} />
       <AskLoopieSidebar 
         isOpen={isSidebarOpen} 
         onClose={() => setIsSidebarOpen(false)} 
