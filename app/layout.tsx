@@ -20,7 +20,7 @@ export default function RootLayout({
         <header className="py-4 px-6 sm:px-8 w-full bg-white shadow-sm">
           <div className="flex items-baseline">
             <h1 className="text-2xl font-bold text-indigo-600">Loopie</h1>
-            <span className="ml-3 text-sm text-gray-500">Your AI coach for product manager interviews</span>
+            <span className="ml-3 text-xs sm:text-sm text-gray-500">AI coach for product manager interviews</span>
           </div>
         </header>
         <main className="p-4 sm:p-6">
