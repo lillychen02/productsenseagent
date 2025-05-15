@@ -372,19 +372,48 @@ export function Conversation() {
           )}
 
           {conversation.status === 'connected' && !isLoading && !isScoring && (
-            <motion.button
-              key="end-interview"
-              variants={buttonVariants}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-              onClick={stopConversation}
-              className="p-3 bg-red-500 text-white rounded-full hover:bg-red-600 disabled:opacity-50 transition-colors flex items-center justify-center shadow-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-              aria-label="End Interview"
-              title="End Interview"
-            >
-              <PhoneDisabledIcon className="w-5 h-5" />
-            </motion.button>
+            <div className="flex flex-col items-center my-4 gap-y-3">
+              <div className="flex items-center gap-2 justify-center h-6">
+                {conversation.isSpeaking && (
+                  <div className={`px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium flex items-center gap-1 ${isTimerRunning ? 'timer-active-glow' : ''}`}>
+                    <span className="flex h-2 w-2 relative">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                    </span>
+                    Speaking
+                  </div>
+                )}
+                {!conversation.isSpeaking && (
+                  <div className={`px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium flex items-center gap-1 ${isTimerRunning ? 'timer-active-glow' : ''}`}>
+                    <span className="flex h-2 w-2 relative">
+                      <span className="absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                    </span>
+                    Listening
+                  </div>
+                )}
+              </div>
+
+              {isTimerRunning && (
+                <div className={`font-medium flex items-center justify-center h-8 text-gray-700`}>
+                  <span>{formatTime(elapsedTime)}</span>
+                </div>
+              )}
+
+              <motion.button
+                key="end-interview"
+                variants={buttonVariants}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                onClick={stopConversation}
+                className="p-3 bg-red-500 text-white rounded-full hover:bg-red-600 disabled:opacity-50 transition-colors flex items-center justify-center shadow-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                aria-label="End Interview"
+                title="End Interview"
+              >
+                <PhoneDisabledIcon className="w-5 h-5" />
+              </motion.button>
+            </div>
           )}
 
           {isScoring && (
@@ -408,46 +437,11 @@ export function Conversation() {
         </AnimatePresence>
       </div>
 
-      <div className="flex flex-col items-center my-4">
-        <div className="flex items-center gap-4 justify-center">
-          {isTimerRunning && (
-            <div className={`px-3 py-1 bg-gray-100 rounded-full font-medium flex items-center gap-1 ${isTimerRunning ? 'timer-active-glow' : ''}`}>
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span>{formatTime(elapsedTime)}</span>
-            </div>
-          )}
-        </div>
-        
-        <div className="flex items-center gap-2 mt-2 justify-center">
-          {conversation.isSpeaking && !isScoring && (
-            <div className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium flex items-center gap-1">
-              <span className="flex h-2 w-2 relative">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-              </span>
-              Speaking
-            </div>
-          )}
-          {!conversation.isSpeaking && conversation.status === 'connected' && !isScoring && (
-            <div className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium flex items-center gap-1">
-              <span className="flex h-2 w-2 relative">
-                <span className="absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-              </span>
-              Listening
-            </div>
-          )}
-        </div>
-      </div>
-
       {isScoring && !scoreResult && (
         <div className="w-full mt-4 p-4 text-center text-gray-600">
           Scoring interview, please wait...
         </div>
       )}
-
     </div>
   );
 } 
