@@ -25,12 +25,14 @@ interface AskLoopieSidebarProps {
   isOpen: boolean;
   onClose: () => void; // Function to close the sidebar
   sessionId: string; // Pass sessionId for API calls later
+  initialMessage?: string; // Added new optional prop
 }
 
 export const AskLoopieSidebar: React.FC<AskLoopieSidebarProps> = ({ 
   isOpen, 
   onClose,
-  sessionId
+  sessionId,
+  initialMessage // Destructure new prop
 }) => {
   console.log("AskLoopieSidebar - received sessionId prop:", sessionId);
 
@@ -42,6 +44,7 @@ export const AskLoopieSidebar: React.FC<AskLoopieSidebarProps> = ({
   const scrollContainerRef = useRef<HTMLDivElement>(null); // Ref for the scrollable message container
   const [isThinking, setIsThinking] = useState(false); // New state for thinking indicator
   const [userHasScrolledUp, setUserHasScrolledUp] = useState(false); // Track if user has manually scrolled up
+  const previousInitialMessageRef = useRef<string | undefined | null>(null); // New ref to track previous initialMessage
 
   // Scroll to bottom function
   const scrollToBottom = (behavior: ScrollBehavior = "auto") => { // Default to auto for instant scroll after new message
@@ -140,63 +143,89 @@ export const AskLoopieSidebar: React.FC<AskLoopieSidebarProps> = ({
     };
   }, [isOpen]); // Re-attach listener if sidebar re-opens
 
+  // Effect to handle initialMessage for auto-sending
+  useEffect(() => {
+    if (isOpen && initialMessage && initialMessage !== previousInitialMessageRef.current) {
+      console.log("[AskLoopieSidebar] Processing new initialMessage for auto-send:", initialMessage);
+      
+      const sendMessageInternal = async (messageContent: string) => {
+        const newUserMessage: ChatMessage = {
+          role: 'user',
+          content: messageContent,
+          timestamp: new Date(),
+        };
+        setMessages(prevMessages => [...prevMessages, newUserMessage]);
+        setIsThinking(true);
+        setError(null);
+
+        try {
+          const response = await fetch('/api/ask-loopie', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId, message: messageContent }),
+          });
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: "Failed to parse error" }));
+            throw new Error(errorData.error || `API Error: ${response.statusText}`);
+          }
+          const assistantMessage = await response.json();
+          setMessages(prevMessages => [...prevMessages, assistantMessage]);
+        } catch (err: any) {
+          setError(`Failed to send initial message: ${err.message}`);
+          setMessages(prevMessages => prevMessages.filter(msg => msg !== newUserMessage)); 
+        } finally {
+          setIsThinking(false);
+        }
+      };
+
+      sendMessageInternal(initialMessage);
+      previousInitialMessageRef.current = initialMessage; // Mark this message as processed
+      setInput(''); // Ensure input is clear after auto-sending
+    }
+    
+    if (!isOpen) {
+      previousInitialMessageRef.current = null; // Reset when sidebar closes
+      setInput(''); // Clear input when sidebar closes
+    }
+  }, [isOpen, initialMessage, sessionId, setMessages, setError, setIsThinking, setInput]); // Dependencies
+
   // --- Send Message Function (To be added next) --- 
   const handleSendMessage = useCallback(async () => {
-    console.log("AskLoopieSidebar - handleSendMessage using sessionId:", sessionId);
     const trimmedInput = input.trim();
-    if (!trimmedInput || !sessionId) {
-      return; // Don't send empty messages
-    }
+    if (!trimmedInput || !sessionId || isThinking) return;
 
     const newUserMessage: ChatMessage = {
       role: 'user',
       content: trimmedInput,
-      timestamp: new Date(), // Use client-side timestamp for optimistic update
+      timestamp: new Date(),
     };
-
-    // When user sends a message, we want to scroll down to see their message and then the response.
-    setUserHasScrolledUp(false); // Reset scroll lock
+    
+    setUserHasScrolledUp(false); 
     setMessages(prevMessages => [...prevMessages, newUserMessage]);
-    setInput('');
-    setIsLoading(true);
-    setIsThinking(true); // Start thinking indicator
+    setInput(''); // Clear input after user clicks send
+    setIsThinking(true);
     setError(null);
 
     try {
       const response = await fetch('/api/ask-loopie', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          sessionId: sessionId,
-          message: trimmedInput,
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, message: trimmedInput }),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: "Failed to parse error response" }));
         throw new Error(errorData.error || `API Error: ${response.statusText}`);
       }
-
       const assistantMessage = await response.json();
-
-      // Replace optimistic user message with actual data if needed, 
-      // or just append assistant message
-      setMessages(prevMessages => [...prevMessages, assistantMessage]); 
-      // Consider updating the timestamp of the user message if needed
-
+      setMessages(prevMessages => [...prevMessages, assistantMessage]);
     } catch (err: any) {
-      console.error("Error sending message:", err);
       setError(`Failed to send message: ${err.message}`);
-      // Optional: Remove the optimistic user message on error
-      // setMessages(prevMessages => prevMessages.filter(msg => msg !== newUserMessage));
+       // setMessages(prevMessages => prevMessages.filter(msg => msg !== newUserMessage)); // Rollback optimistic UI
     } finally {
-      setIsLoading(false);
-      setIsThinking(false); // Stop thinking indicator
-      // The useEffect for messages will handle scrolling based on the new message and userHasScrolledUp state
+      setIsThinking(false);
     }
-  }, [input, sessionId, messages, setMessages, setInput, setIsLoading, setError, setIsThinking]); // Include all dependencies
+  }, [input, sessionId, isThinking]); // Simplified dependencies for user send
 
   return (
     <AnimatePresence>
