@@ -340,7 +340,7 @@ export function Conversation({ onInterviewActiveChange, onScoringStateChange }: 
     setTimeout(() => {
         scoreCurrentSession(); 
     }, 3000); 
-  }, [conversation, scoreCurrentSession, onInterviewActiveChange, onScoringStateChange]);
+  }, [conversation, scoreCurrentSession, onScoringStateChange]);
 
   // Initial state check - if conversation status is not connected, it's not active.
   useEffect(() => {

@@ -66,21 +66,19 @@ interface TranscriptEntry {
 
 export async function GET(
   request: NextRequest,
-  context: { params: { sessionId: string } }
+  context: any // Let TypeScript infer, or use 'any' if strict mode requires some type
 ) {
-  console.log('[API /api/results/[sessionId]] GET context object:', context);
+  // console.log('[API /api/results/[sessionId]] GET context object:', context); // Keep for debugging if needed
   
-  // Await context.params before accessing sessionId
-  const paramsObject = await context.params; 
-  console.log('[API /api/results/[sessionId]] Resolved paramsObject:', paramsObject);
-  const { sessionId } = paramsObject;
+  const sessionId = context.params?.sessionId; // Optional chaining for safety
+  // console.log('[API /api/results/[sessionId]] Extracted sessionId:', sessionId);
 
   if (!sessionId) {
-    return NextResponse.json({ error: 'Missing sessionId parameter' }, { status: 400 });
+    return NextResponse.json({ error: 'Session ID is required or context.params is not structured as expected.' }, { status: 400 });
   }
 
   try {
-    console.log(`[API /api/results/[sessionId]] Processing for sessionId: ${sessionId}`);
+    // console.log(`[API /api/results/[sessionId]] Processing for sessionId: ${sessionId}`);
     const { db } = await connectToDatabase();
 
     // 1. Fetch the LATEST score for the session
