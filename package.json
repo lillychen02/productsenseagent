@@ -15,7 +15,7 @@
     "framer-motion": "^12.11.0",
     "mongodb": "^6.16.0",
     "mongoose": "^8.14.2",
-    "next": "^15.4.0-canary.36",
+    "next": "^15.3.2",
     "openai": "^4.98.0",
     "react": "^18",
     "react-dom": "^18",
