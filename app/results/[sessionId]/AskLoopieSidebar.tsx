@@ -45,6 +45,7 @@ export const AskLoopieSidebar: React.FC<AskLoopieSidebarProps> = ({
   const [isThinking, setIsThinking] = useState(false); // New state for thinking indicator
   const [userHasScrolledUp, setUserHasScrolledUp] = useState(false); // Track if user has manually scrolled up
   const previousInitialMessageRef = useRef<string | undefined | null>(null); // New ref to track previous initialMessage
+  const previousIsLoadingRef = useRef<boolean | undefined>();
 
   // Scroll to bottom function
   const scrollToBottom = (behavior: ScrollBehavior = "auto") => { // Default to auto for instant scroll after new message
@@ -54,94 +55,66 @@ export const AskLoopieSidebar: React.FC<AskLoopieSidebarProps> = ({
   // Fetch chat history when sidebar opens
   useEffect(() => {
     if (isOpen && sessionId) {
-      console.log("AskLoopieSidebar - useEffect (fetchHistory) using sessionId:", sessionId);
       const fetchHistory = async () => {
-        console.log(`FETCH_HISTORY for ${sessionId}: Setting isLoading, clearing error, calling setMessages([])`);
         setIsLoading(true);
         setError(null);
-        setMessages([]);
+        setMessages([]); // Clear messages before fetching new history
         setUserHasScrolledUp(false); // Reset scroll state on new session/open
         try {
           const response = await fetch(`/api/chat-sessions/${sessionId}`);
-          console.log(`FETCH_HISTORY for ${sessionId}: API response status: ${response.status}`);
           const data = await response.json();
-          console.log(`FETCH_HISTORY for ${sessionId}: API response data:`, data);
           if (!response.ok) {
-            if (response.status === 404 || (response.status === 200 && data.messages && data.messages.length === 0)) { 
-                console.log('No existing chat session found or session is empty, starting fresh.');
+            if (response.status === 404 || (data.messages && data.messages.length === 0)) {
                 setMessages([]); 
             } else {
-                 console.error(`FETCH_HISTORY for ${sessionId}: Error - Non-OK response: ${response.statusText}`);
                  throw new Error(`Failed to fetch chat history: ${response.statusText}`);
             }
           } else {
              setMessages(data.messages || []); 
+             // Initial scroll will be handled by the messages useEffect
           }
         } catch (err: any) {
-          console.error(`FETCH_HISTORY for ${sessionId}: Error caught:`, err);
           setError('Could not load chat history.');
           setMessages([]);
         } finally {
-          // Log messages.length AFTER state updates might have settled, though direct log might not show immediate update
-          // For more accurate check of state AFTER setMessages, log inside a subsequent useEffect dependent on messages
-          console.log(`FETCH_HISTORY for ${sessionId}: Setting isLoading to false.`); 
           setIsLoading(false);
-          // Scroll to bottom after initial history load if there are messages
-          if (messages.length > 0) {
-            setTimeout(() => scrollToBottom('auto'), 0); // Auto for initial load
-          }
         }
       };
       fetchHistory();
     }
-  }, [isOpen, sessionId]);
+  }, [isOpen, sessionId, setMessages, setError, setIsLoading, setUserHasScrolledUp]); // Added setters to deps
 
-  // Conditional auto-scroll logic
+  // Consolidated auto-scroll logic
   useEffect(() => {
     const scrollContainer = scrollContainerRef.current;
-    if (!scrollContainer || messages.length === 0) return;
+    if (!scrollContainer || messages.length === 0) {
+      if (messages.length === 0) setUserHasScrolledUp(false);
+      return;
+    }
 
     const lastMessage = messages[messages.length - 1];
 
-    // Only scroll to bottom if the last message is from the user (they just sent it)
-    if (lastMessage.role === 'user') {
-      // setUserHasScrolledUp(false); // This is already handled in handleSendMessage
-      scrollToBottom("smooth");
+    // Determine if this is an initial load or history fetch completion
+    // This heuristic assumes isLoading was true and just became false, and messages are now populated.
+    // A more direct way might be to pass a flag from fetchHistory, but this often works.
+    const isInitialLoadOrHistoryFetched = isLoading === false && previousIsLoadingRef.current === true;
+    previousIsLoadingRef.current = isLoading; // Track previous isLoading state
+
+    if (isInitialLoadOrHistoryFetched && messages.length > 0) {
+      scrollToBottom('auto'); // Instant scroll for initial load/history
+      setUserHasScrolledUp(false); 
+    } else if (lastMessage.role === 'user') {
+      // This handles user sending a new message OR the auto-sent initialMessage
+      scrollToBottom('smooth');
+      setUserHasScrolledUp(false); 
     }
-    // No automatic scrolling for assistant messages regardless of userHasScrolledUp state.
+    // No automatic scrolling for assistant messages if it's not initial load or user just sent one.
 
-  }, [messages]); // Only trigger on new messages
-
-  // Detect manual scroll by user to set userHasScrolledUp
+  }, [messages, isLoading, setIsLoading, setUserHasScrolledUp]); // Include isLoading for initial scroll detection
+  
   useEffect(() => {
-    const scrollContainer = scrollContainerRef.current;
-    let scrollTimeout: NodeJS.Timeout;
-
-    const handleScroll = () => {
-      clearTimeout(scrollTimeout);
-      scrollTimeout = setTimeout(() => {
-        if (scrollContainer) {
-          // Check if scrolled up from the bottom by a certain threshold
-          const isScrolledToBottom = scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight < 50; // 50px threshold
-          if (!isScrolledToBottom) {
-            setUserHasScrolledUp(true);
-          } else {
-            setUserHasScrolledUp(false); // Allow auto-scroll again if user scrolls back to bottom
-          }
-        }
-      }, 150); // Debounce scroll event slightly
-    };
-
-    if (isOpen && scrollContainer) {
-      scrollContainer.addEventListener('scroll', handleScroll);
-    }
-    return () => {
-      if (scrollContainer) {
-        scrollContainer.removeEventListener('scroll', handleScroll);
-      }
-      clearTimeout(scrollTimeout);
-    };
-  }, [isOpen]); // Re-attach listener if sidebar re-opens
+    previousIsLoadingRef.current = isLoading;
+  });
 
   // Effect to handle initialMessage for auto-sending
   useEffect(() => {

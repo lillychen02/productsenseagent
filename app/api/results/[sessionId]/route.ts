@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '../../../../lib/mongodb'; // Adjust path as needed
 import { ObjectId } from 'mongodb';
 
@@ -65,16 +65,20 @@ interface TranscriptEntry {
 }
 
 export async function GET(
-  request: Request,
-  { params }: { params: { sessionId: string } }
+  request: NextRequest,
+  context: any // Let TypeScript infer, or use 'any' if strict mode requires some type
 ) {
-  const { sessionId } = params;
+  // console.log('[API /api/results/[sessionId]] GET context object:', context); // Keep for debugging if needed
+  
+  const sessionId = context.params?.sessionId; // Optional chaining for safety
+  // console.log('[API /api/results/[sessionId]] Extracted sessionId:', sessionId);
 
   if (!sessionId) {
-    return NextResponse.json({ error: 'Missing sessionId parameter' }, { status: 400 });
+    return NextResponse.json({ error: 'Session ID is required or context.params is not structured as expected.' }, { status: 400 });
   }
 
   try {
+    // console.log(`[API /api/results/[sessionId]] Processing for sessionId: ${sessionId}`);
     const { db } = await connectToDatabase();
 
     // 1. Fetch the LATEST score for the session
@@ -113,7 +117,7 @@ export async function GET(
     }, { status: 200 });
 
   } catch (error) {
-    console.error(`Failed to fetch results for sessionId ${sessionId}:`, error);
+    console.error(`[API /api/results/[sessionId]] Failed to fetch results for sessionId ${sessionId}:`, error);
     return NextResponse.json({ error: 'Failed to fetch results' }, { status: 500 });
   }
 } 
