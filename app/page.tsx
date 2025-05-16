@@ -8,7 +8,7 @@ export default function Home() {
           Product Sense Interview
         </h1>
         <p className="text-lg sm:text-xl text-gray-600 mb-10">
-          Talk like it&apos;s real. Get coaching that makes you better.
+          Interview like it&apos;s real. Get coaching that makes you better.
         </p>
         
         <div className="mb-8 p-6 bg-gray-50 rounded-xl shadow-sm text-left w-full max-w-lg">
