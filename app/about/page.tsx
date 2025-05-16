@@ -24,7 +24,7 @@ export default function AboutPage() {
           Need help or feedback?
         </h3>
         <p className="text-center text-gray-600 mb-2">
-          We'd love to hear from you.
+          We&apos;d love to hear from you.
         </p>
         <p className="text-center">
           <a href="mailto:lillychen02@gmail.com" className="text-indigo-600 hover:text-indigo-700 hover:underline text-lg">
