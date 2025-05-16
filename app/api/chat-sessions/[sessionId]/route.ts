@@ -6,9 +6,9 @@ import { ChatSession } from '@/types'; // Import the ChatSession interface
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { sessionId: string } }
+  context: { params: { sessionId: string } }
 ) {
-  const { sessionId } = params;
+  const { sessionId } = context.params;
   // console.log(`[API GET /api/chat-sessions] Received request for sessionId: ${sessionId}`);
 
   if (!sessionId) {
