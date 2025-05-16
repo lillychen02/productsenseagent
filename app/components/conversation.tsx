@@ -25,7 +25,12 @@ const PhoneDisabledIcon = ({ className = "w-6 h-6", fill = "currentColor" }: { c
   </svg>
 );
 
-export function Conversation() {
+export interface ConversationProps {
+  onInterviewActiveChange?: (isActive: boolean) => void;
+  onScoringStateChange?: (isScoring: boolean) => void;
+}
+
+export function Conversation({ onInterviewActiveChange, onScoringStateChange }: ConversationProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isRubricLoading, setIsRubricLoading] = useState<boolean>(true);
@@ -41,7 +46,7 @@ export function Conversation() {
   // Scoring state
   const defaultRubricId = useRef<string | null>(null);
   const defaultRubricName = useRef<string | null>(null);
-  const [isScoring, setIsScoring] = useState<boolean>(false);
+  const [internalIsScoring, setInternalIsScoring] = useState<boolean>(false);
   const [scoreResult, setScoreResult] = useState<any>(null); // Will be typed more specifically later
 
   useEffect(() => {
@@ -135,13 +140,13 @@ export function Conversation() {
     if (!currentSessionId) {
       console.error('No ELI conversation_id (from ref) available for scoring.');
       alert('Error: No session ID. Cannot score.');
-      setIsScoring(false);
+      setInternalIsScoring(false);
       return;
     }
     if (!defaultRubricId.current) {
       console.error('No default rubric ID for scoring.');
       alert('Error: Rubric not configured.');
-      setIsScoring(false);
+      setInternalIsScoring(false);
       return;
     }
     console.log(`Attempting to score ELI conversation_id ${currentSessionId} with rubric ${defaultRubricId.current}`);
@@ -155,7 +160,8 @@ export function Conversation() {
         const errorData = await response.json().catch(() => ({ error: "Failed to parse scoring error." }));
         console.error('Scoring API call failed:', response.status, errorData);
         alert(`Error scoring: ${errorData.error || response.statusText}`);
-        setIsScoring(false);
+        setInternalIsScoring(false);
+        if (onScoringStateChange) onScoringStateChange(false);
         return;
       }
       const result = await response.json();
@@ -164,25 +170,31 @@ export function Conversation() {
         router.push(`/results/${currentSessionId}`);
       } else {
         alert('Scoring completed, but no score data was returned. Cannot redirect.');
-        setIsScoring(false);
+        setInternalIsScoring(false);
+        if (onScoringStateChange) onScoringStateChange(false);
       }
     } catch (error) {
       alert(`Error scoring session: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      setIsScoring(false);
+      setInternalIsScoring(false);
+      if (onScoringStateChange) onScoringStateChange(false);
     }
-  }, [defaultRubricId, router]);
+  }, [defaultRubricId, router, onScoringStateChange]);
 
   const conversation = useConversation({
     onConnect: () => {
       logClient('ElevenLabs SDK: onConnect - Voice agent connected.');
       setIsTimerRunning(true);
-      setScoreResult(null); // Clear scores on new session
+      setScoreResult(null);
+      if (onInterviewActiveChange) onInterviewActiveChange(true);
+      if (onScoringStateChange) onScoringStateChange(false);
     },
     onDisconnect: (reason: any) => {
       logClient('ElevenLabs SDK: onDisconnect - Voice agent disconnected.', reason || 'No specific reason provided by SDK.');
       setIsTimerRunning(false);
-      if (!isScoring) {
-        // alert("Interview disconnected."); // Or a more specific message based on context
+      if (onInterviewActiveChange) onInterviewActiveChange(false);
+      if (internalIsScoring) {
+        if (onScoringStateChange) onScoringStateChange(false);
+        setInternalIsScoring(false);
       }
     },
     onMessage: (message) => {
@@ -194,6 +206,7 @@ export function Conversation() {
         logClient(`ElevenLabs SDK: Interruption occurred - Reason: ${reason}, SessionId: ${currentSessionIdFromRef}`);
         setIsTimerRunning(false);
         alert(`Session interrupted: ${reason}`);
+        if (onInterviewActiveChange) onInterviewActiveChange(false);
         return;
       }
       if (message && message.message && typeof message.message === 'string') {
@@ -212,8 +225,12 @@ export function Conversation() {
     onError: (error: any) => {
       logClient('ElevenLabs SDK: onError - An error occurred.', error);
       setIsTimerRunning(false);
+      if (onInterviewActiveChange) onInterviewActiveChange(false);
       alert(`An SDK error occurred: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      setIsScoring(false);
+      if (internalIsScoring) {
+        if (onScoringStateChange) onScoringStateChange(false);
+        setInternalIsScoring(false);
+      }
     },
   });
 
@@ -293,13 +310,16 @@ export function Conversation() {
         console.error('Error saving session metadata:', err);
       }
 
+      setInternalIsScoring(false);
+      if (onScoringStateChange) onScoringStateChange(false);
+
     } catch (error) {
       console.error('Failed to start conversation:', error);
       alert('Failed to start interview. Check permissions and console.');
     } finally {
       setIsLoading(false);
     }
-  }, [conversation, defaultRubricId, defaultRubricName, isRubricLoading]);
+  }, [conversation, defaultRubricId, defaultRubricName, isRubricLoading, onInterviewActiveChange, onScoringStateChange]);
 
   const stopConversation = useCallback(async () => {
     logClient('stopConversation: Initiated.');
@@ -309,14 +329,25 @@ export function Conversation() {
         return;
     }
     console.log('User ending conversation session:', currentSessionId);
-    setIsScoring(true); 
+    setInternalIsScoring(true);
+    if (onScoringStateChange) onScoringStateChange(true);
+
     await conversation.endSession();
-    console.log('ElevenLabs Conversation session ended by user.');
+    logClient('ElevenLabs Conversation session ended by user.');
     setIsTimerRunning(false);
+    if (onInterviewActiveChange) onInterviewActiveChange(false);
+    
     setTimeout(() => {
         scoreCurrentSession(); 
     }, 3000); 
-  }, [conversation, scoreCurrentSession]);
+  }, [conversation, scoreCurrentSession, onScoringStateChange]);
+
+  // Initial state check - if conversation status is not connected, it's not active.
+  useEffect(() => {
+    if (conversation.status !== 'connected') {
+      if (onInterviewActiveChange) onInterviewActiveChange(false);
+    }
+  }, [conversation.status, onInterviewActiveChange]);
 
   const buttonVariants = {
     hidden: { opacity: 0, scale: 0.9 },
@@ -326,9 +357,9 @@ export function Conversation() {
 
   return (
     <div className="flex flex-col items-center gap-4 w-full conversation-container pt-2 pb-6 px-6">
-      <div className="flex gap-2 justify-center h-12 relative">
+      <div className="flex gap-2 justify-center h-20 relative">
         <AnimatePresence mode='wait' initial={false}>
-          {conversation.status !== 'connected' && !isLoading && !isScoring && (
+          {conversation.status !== 'connected' && !isLoading && !internalIsScoring && (
             <motion.button
               key="start-interview"
               variants={buttonVariants}
@@ -337,17 +368,17 @@ export function Conversation() {
               exit="exit"
               onClick={startConversation}
               disabled={isRubricLoading}
-              className="p-3 bg-gray-100 rounded-full hover:bg-gray-200 disabled:opacity-50 transition-colors flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+              className="p-5 bg-gray-100 rounded-full hover:bg-gray-200 disabled:opacity-50 transition-colors flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
               aria-label="Start your interview (voice only)"
               title="Start your interview (voice only)"
             >
               {isRubricLoading ? (
-                <svg className="animate-spin h-5 w-5 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <svg className="animate-spin h-8 w-8 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
               ) : (
-                <SoundWaveIcon className="w-14 h-8 fill-indigo-600 hover:fill-indigo-700" />
+                <SoundWaveIcon className="w-20 h-12 fill-indigo-600 hover:fill-indigo-700" />
               )}
             </motion.button>
           )}
@@ -360,18 +391,18 @@ export function Conversation() {
               animate="visible"
               exit="exit"
               disabled
-              className="p-3 rounded-full flex items-center justify-center bg-gray-100 focus:outline-none"
+              className="p-5 rounded-full flex items-center justify-center bg-gray-100 focus:outline-none"
               aria-label="Connecting"
               title="Connecting..."
             >
-              <svg className="animate-spin h-5 w-5 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <svg className="animate-spin h-8 w-8 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
             </motion.button>
           )}
 
-          {conversation.status === 'connected' && !isLoading && !isScoring && (
+          {conversation.status === 'connected' && !isLoading && !internalIsScoring && (
             <div className="flex flex-col items-center my-4 gap-y-3">
               <div className="flex items-center gap-2 justify-center h-6">
                 {conversation.isSpeaking && (
@@ -416,7 +447,7 @@ export function Conversation() {
             </div>
           )}
 
-          {isScoring && (
+          {internalIsScoring && (
             <motion.button
               key="scoring"
               variants={buttonVariants}
@@ -424,11 +455,11 @@ export function Conversation() {
               animate="visible"
               exit="exit"
               disabled
-              className="p-3 bg-gray-100 rounded-full flex items-center justify-center focus:outline-none"
+              className="p-5 bg-gray-100 rounded-full flex items-center justify-center focus:outline-none"
               aria-label="Scoring"
               title="Scoring..."
             >
-              <svg className="animate-spin h-5 w-5 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <svg className="animate-spin h-8 w-8 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
@@ -437,7 +468,7 @@ export function Conversation() {
         </AnimatePresence>
       </div>
 
-      {isScoring && !scoreResult && (
+      {internalIsScoring && !scoreResult && (
         <div className="w-full mt-4 p-4 text-center text-gray-600">
           Scoring interview, please wait...
         </div>

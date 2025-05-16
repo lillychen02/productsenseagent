@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '../../../../lib/mongodb'; // Adjusted path for nesting
 import { ObjectId } from 'mongodb';
 
@@ -9,8 +9,8 @@ interface Rubric {
 
 // DELETE handler to remove a specific rubric by ID
 export async function DELETE(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  context: any
 ) {
   // 1. Check for Admin Secret
   const adminSecret = process.env.ADMIN_SECRET;
@@ -25,7 +25,12 @@ export async function DELETE(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { id } = params;
+  const id = context.params?.id;
+  
+  if (!id) {
+    return NextResponse.json({ error: 'Rubric ID is required or context.params is not structured as expected.' }, { status: 400 });
+  }
+
   let mongoId;
 
   try {
