@@ -11,7 +11,7 @@ export default function AboutPage() {
           <span className="text-indigo-600 font-bold">Loopie</span> was built by product managers, for product managers — to help you grow through real, voice-based interview practice.
         </p>
         <p>
-          We believe the best way to improve is by doing. That's why <span className="text-indigo-600 font-bold">Loopie</span> gives you <strong className="font-semibold">real-time, specific coaching</strong> tied directly to what you say in your mock interviews — <strong className="font-semibold">just like a great mentor would</strong>.
+          We believe the best way to improve is by doing. That&apos;s why <span className="text-indigo-600 font-bold">Loopie</span> gives you <strong className="font-semibold">real-time, specific coaching</strong> tied directly to what you say in your mock interviews — <strong className="font-semibold">just like a great mentor would</strong>.
         </p>
         
         <div className="pt-6 text-center sm:text-left">

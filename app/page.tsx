@@ -49,7 +49,7 @@ export default function Home() {
             🪄 What <span className="text-indigo-600">Loopie</span> gives you after you interview
           </h2>
           <p className="text-center text-gray-600 mx-auto mb-10 sm:mb-12 text-base sm:text-lg">
-            These aren't generic tips. You'll get coaching tied to exactly what you said out loud.
+            These aren&apos;t generic tips. You&apos;ll get coaching tied to exactly what you said out loud.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {/* Card 1: MVP Feedback: Over-Explaining the Why */}
@@ -68,20 +68,20 @@ export default function Home() {
                 <div>
                   <h3 className="font-semibold text-gray-700 mb-1">What you said:</h3>
                   <blockquote className="pl-3 py-1 border-l-4 border-gray-300 text-gray-600 italic text-[13px] leading-relaxed">
-                    "I think the con is that it doesn't scale too well. But I like that we could get this out there and then see what happens with it and then see how it goes. And we could validate whether this is true or not before we build something more costly."
+                    &ldquo;I think the con is that it doesn&apos;t scale too well. But I like that we could get this out there and then see what happens with it and then see how it goes. And we could validate whether this is true or not before we build something more costly.&rdquo;
                   </blockquote>
                 </div>
                 <div>
                   <h3 className="font-semibold text-gray-700 mb-1 mt-3">Why it felt unclear:</h3>
                   <p className="text-gray-600 text-[13px] leading-relaxed">
-                    You make your point (it doesn't scale, but it's good for validation) and then restate it in several similar ways.
+                    You make your point (it doesn&apos;t scale, but it&apos;s good for validation) and then restate it in several similar ways.
                   </p>
                 </div>
                 <div className="mt-3">
                   <h3 className="font-semibold text-gray-700 mb-1">How you could tighten it:</h3>
                   <div className="bg-green-50 p-3 rounded-md border border-green-200">
                     <p className="text-green-800 font-medium text-[13px] leading-relaxed italic">
-                      "The downside is it doesn't scale. But it's perfect for validating demand before we invest in a more complex solution."
+                      &ldquo;The downside is it doesn&apos;t scale. But it&apos;s perfect for validating demand before we invest in a more complex solution.&rdquo;
                     </p>
                   </div>
                 </div>
@@ -104,20 +104,20 @@ export default function Home() {
                 <div>
                   <h3 className="font-semibold text-gray-700 mb-1">What you said:</h3>
                   <blockquote className="pl-3 py-1 border-l-4 border-gray-300 text-gray-600 italic text-[13px] leading-relaxed">
-                    "So I'll brainstorm a few solutions that can help us solve this pain point of what songs, what are the best songs to sing? And then we can do some research on how to make sure that our artists are trending on social media."
+                    &ldquo;So I&apos;ll brainstorm a few solutions that can help us solve this pain point of what songs, what are the best songs to sing? And then we can do some research on how to make sure that our artists are trending on social media.&rdquo;
                   </blockquote>
                 </div>
                 <div>
                   <h3 className="font-semibold text-gray-700 mb-1 mt-3">Why it feels rambling:</h3>
                   <p className="text-gray-600 text-[13px] leading-relaxed">
-                    This sentence starts clearly ("I'll brainstorm a few solutions") but then trails into a vague, less focused ending about researching artist trends and songs to sing — which could distract from your next strong point.
+                    This sentence starts clearly (&ldquo;I&apos;ll brainstorm a few solutions&rdquo;) but then trails into a vague, less focused ending about researching artist trends and songs to sing — which could distract from your next strong point.
                   </p>
                 </div>
                 <div className="mt-3">
                   <h3 className="font-semibold text-gray-700 mb-1">How you could tighten it:</h3>
                   <div className="bg-green-50 p-3 rounded-md border border-green-200">
                     <p className="text-green-800 font-medium text-[13px] leading-relaxed italic">
-                      "Let me walk through a few solutions that could help trend-followers discover what's hot in music right now."
+                      &ldquo;Let me walk through a few solutions that could help trend-followers discover what&apos;s hot in music right now.&rdquo;
                     </p>
                   </div>
                 </div>
