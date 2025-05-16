@@ -10,6 +10,7 @@ export default function Home() {
     visible: { opacity: 1, y: 0, transition: { duration: 0.5 } },
   };
   const [isInterviewActive, setIsInterviewActive] = useState(false);
+  const [isCurrentlyScoring, setIsCurrentlyScoring] = useState(false);
 
   return (
     <main className="flex min-h-screen flex-col items-center p-6 pt-10 bg-white">
@@ -40,12 +41,15 @@ export default function Home() {
         </div>
 
         <div id="interview-section" className="w-full">
-          <Conversation onInterviewActiveChange={setIsInterviewActive} />
+          <Conversation 
+            onInterviewActiveChange={setIsInterviewActive} 
+            onScoringStateChange={setIsCurrentlyScoring}
+          />
         </div>
       </div>
 
       {/* Feedback Examples Section - Conditionally Rendered */}
-      {!isInterviewActive && (
+      {!isInterviewActive && !isCurrentlyScoring && (
         <section className="w-full bg-purple-50 py-16 sm:py-20">
           <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
             <h2 className="text-3xl font-bold text-gray-800 text-center mb-4">

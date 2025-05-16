@@ -4,15 +4,23 @@ import connectMongoose from '@/lib/mongoose'; // Import Mongoose connect utility
 import { ChatSessionModel } from '@/models/chatSession';
 import { ChatSession } from '@/types'; // Import the ChatSession interface
 
+// Define the Params type as suggested for context
+type RouteContextParams = {
+  params: {
+    sessionId: string;
+  };
+};
+
 export async function GET(
   request: NextRequest,
-  context: { params: { sessionId: string } }
+  context: RouteContextParams // Use the defined type
 ) {
+  console.log('[API /api/chat-sessions/[sessionId]] GET context:', context); // Log the context
   const { sessionId } = context.params;
-  // console.log(`[API GET /api/chat-sessions] Received request for sessionId: ${sessionId}`);
+  console.log('[API /api/chat-sessions/[sessionId]] Extracted sessionId:', sessionId); // Log the extracted sessionId
 
   if (!sessionId) {
-    // console.log(`[API GET /api/chat-sessions] Error: Missing sessionId`);
+    console.error('[API /api/chat-sessions/[sessionId]] Error: Missing sessionId in params.');
     return NextResponse.json({ error: 'Session ID is required' }, { status: 400 });
   }
 
@@ -25,8 +33,7 @@ export async function GET(
     const chatSessionDoc = await ChatSessionModel.findOne({ sessionId }).lean<ChatSession>();
     
     if (!chatSessionDoc) {
-    //   console.log(`[API GET /api/chat-sessions] Document NOT FOUND (null) for ${sessionId}.`);
-    //   console.log(`[API GET /api/chat-sessions] No session found for ${sessionId}, returning empty messages.`);
+      console.log(`[API /api/chat-sessions/[sessionId]] No chat session found for sessionId: ${sessionId}, returning empty messages.`);
       return NextResponse.json({ sessionId, messages: [] });
     }
 
@@ -39,7 +46,7 @@ export async function GET(
     });
 
   } catch (error) {
-    // console.error(`[API GET /api/chat-sessions] Error fetching chat session for ${sessionId}:`, error);
+    console.error(`[API /api/chat-sessions/[sessionId]] Error fetching chat session for ${sessionId}:`, error);
     let errorMessage = 'Internal Server Error';
     if (error instanceof Error) {
         errorMessage = error.message;

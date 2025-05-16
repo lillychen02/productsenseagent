@@ -27,9 +27,10 @@ const PhoneDisabledIcon = ({ className = "w-6 h-6", fill = "currentColor" }: { c
 
 export interface ConversationProps {
   onInterviewActiveChange?: (isActive: boolean) => void;
+  onScoringStateChange?: (isScoring: boolean) => void;
 }
 
-export function Conversation({ onInterviewActiveChange }: ConversationProps) {
+export function Conversation({ onInterviewActiveChange, onScoringStateChange }: ConversationProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isRubricLoading, setIsRubricLoading] = useState<boolean>(true);
@@ -45,7 +46,7 @@ export function Conversation({ onInterviewActiveChange }: ConversationProps) {
   // Scoring state
   const defaultRubricId = useRef<string | null>(null);
   const defaultRubricName = useRef<string | null>(null);
-  const [isScoring, setIsScoring] = useState<boolean>(false);
+  const [internalIsScoring, setInternalIsScoring] = useState<boolean>(false);
   const [scoreResult, setScoreResult] = useState<any>(null); // Will be typed more specifically later
 
   useEffect(() => {
@@ -139,13 +140,13 @@ export function Conversation({ onInterviewActiveChange }: ConversationProps) {
     if (!currentSessionId) {
       console.error('No ELI conversation_id (from ref) available for scoring.');
       alert('Error: No session ID. Cannot score.');
-      setIsScoring(false);
+      setInternalIsScoring(false);
       return;
     }
     if (!defaultRubricId.current) {
       console.error('No default rubric ID for scoring.');
       alert('Error: Rubric not configured.');
-      setIsScoring(false);
+      setInternalIsScoring(false);
       return;
     }
     console.log(`Attempting to score ELI conversation_id ${currentSessionId} with rubric ${defaultRubricId.current}`);
@@ -159,7 +160,8 @@ export function Conversation({ onInterviewActiveChange }: ConversationProps) {
         const errorData = await response.json().catch(() => ({ error: "Failed to parse scoring error." }));
         console.error('Scoring API call failed:', response.status, errorData);
         alert(`Error scoring: ${errorData.error || response.statusText}`);
-        setIsScoring(false);
+        setInternalIsScoring(false);
+        if (onScoringStateChange) onScoringStateChange(false);
         return;
       }
       const result = await response.json();
@@ -168,13 +170,15 @@ export function Conversation({ onInterviewActiveChange }: ConversationProps) {
         router.push(`/results/${currentSessionId}`);
       } else {
         alert('Scoring completed, but no score data was returned. Cannot redirect.');
-        setIsScoring(false);
+        setInternalIsScoring(false);
+        if (onScoringStateChange) onScoringStateChange(false);
       }
     } catch (error) {
       alert(`Error scoring session: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      setIsScoring(false);
+      setInternalIsScoring(false);
+      if (onScoringStateChange) onScoringStateChange(false);
     }
-  }, [defaultRubricId, router]);
+  }, [defaultRubricId, router, onScoringStateChange]);
 
   const conversation = useConversation({
     onConnect: () => {
@@ -182,13 +186,15 @@ export function Conversation({ onInterviewActiveChange }: ConversationProps) {
       setIsTimerRunning(true);
       setScoreResult(null);
       if (onInterviewActiveChange) onInterviewActiveChange(true);
+      if (onScoringStateChange) onScoringStateChange(false);
     },
     onDisconnect: (reason: any) => {
       logClient('ElevenLabs SDK: onDisconnect - Voice agent disconnected.', reason || 'No specific reason provided by SDK.');
       setIsTimerRunning(false);
       if (onInterviewActiveChange) onInterviewActiveChange(false);
-      if (!isScoring) {
-        // alert("Interview disconnected."); // Or a more specific message based on context
+      if (internalIsScoring) {
+        if (onScoringStateChange) onScoringStateChange(false);
+        setInternalIsScoring(false);
       }
     },
     onMessage: (message) => {
@@ -221,7 +227,10 @@ export function Conversation({ onInterviewActiveChange }: ConversationProps) {
       setIsTimerRunning(false);
       if (onInterviewActiveChange) onInterviewActiveChange(false);
       alert(`An SDK error occurred: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      setIsScoring(false);
+      if (internalIsScoring) {
+        if (onScoringStateChange) onScoringStateChange(false);
+        setInternalIsScoring(false);
+      }
     },
   });
 
@@ -301,13 +310,16 @@ export function Conversation({ onInterviewActiveChange }: ConversationProps) {
         console.error('Error saving session metadata:', err);
       }
 
+      setInternalIsScoring(false);
+      if (onScoringStateChange) onScoringStateChange(false);
+
     } catch (error) {
       console.error('Failed to start conversation:', error);
       alert('Failed to start interview. Check permissions and console.');
     } finally {
       setIsLoading(false);
     }
-  }, [conversation, defaultRubricId, defaultRubricName, isRubricLoading, onInterviewActiveChange]);
+  }, [conversation, defaultRubricId, defaultRubricName, isRubricLoading, onInterviewActiveChange, onScoringStateChange]);
 
   const stopConversation = useCallback(async () => {
     logClient('stopConversation: Initiated.');
@@ -317,15 +329,18 @@ export function Conversation({ onInterviewActiveChange }: ConversationProps) {
         return;
     }
     console.log('User ending conversation session:', currentSessionId);
-    setIsScoring(true); 
+    setInternalIsScoring(true);
+    if (onScoringStateChange) onScoringStateChange(true);
+
     await conversation.endSession();
-    console.log('ElevenLabs Conversation session ended by user.');
+    logClient('ElevenLabs Conversation session ended by user.');
     setIsTimerRunning(false);
+    if (onInterviewActiveChange) onInterviewActiveChange(false);
+    
     setTimeout(() => {
         scoreCurrentSession(); 
     }, 3000); 
-    if (onInterviewActiveChange) onInterviewActiveChange(false);
-  }, [conversation, scoreCurrentSession, onInterviewActiveChange]);
+  }, [conversation, scoreCurrentSession, onInterviewActiveChange, onScoringStateChange]);
 
   // Initial state check - if conversation status is not connected, it's not active.
   useEffect(() => {
@@ -344,7 +359,7 @@ export function Conversation({ onInterviewActiveChange }: ConversationProps) {
     <div className="flex flex-col items-center gap-4 w-full conversation-container pt-2 pb-6 px-6">
       <div className="flex gap-2 justify-center h-20 relative">
         <AnimatePresence mode='wait' initial={false}>
-          {conversation.status !== 'connected' && !isLoading && !isScoring && (
+          {conversation.status !== 'connected' && !isLoading && !internalIsScoring && (
             <motion.button
               key="start-interview"
               variants={buttonVariants}
@@ -387,7 +402,7 @@ export function Conversation({ onInterviewActiveChange }: ConversationProps) {
             </motion.button>
           )}
 
-          {conversation.status === 'connected' && !isLoading && !isScoring && (
+          {conversation.status === 'connected' && !isLoading && !internalIsScoring && (
             <div className="flex flex-col items-center my-4 gap-y-3">
               <div className="flex items-center gap-2 justify-center h-6">
                 {conversation.isSpeaking && (
@@ -432,7 +447,7 @@ export function Conversation({ onInterviewActiveChange }: ConversationProps) {
             </div>
           )}
 
-          {isScoring && (
+          {internalIsScoring && (
             <motion.button
               key="scoring"
               variants={buttonVariants}
@@ -453,7 +468,7 @@ export function Conversation({ onInterviewActiveChange }: ConversationProps) {
         </AnimatePresence>
       </div>
 
-      {isScoring && !scoreResult && (
+      {internalIsScoring && !scoreResult && (
         <div className="w-full mt-4 p-4 text-center text-gray-600">
           Scoring interview, please wait...
         </div>
