@@ -24,15 +24,15 @@ export default function Home() {
           <ul className="space-y-3 text-gray-700">
             <li className="flex items-start">
               <span className="text-indigo-500 mr-3 text-xl">›</span>
-              <span>Speak your answers out loud—just like a real interview</span>
+              <span>You speak your answers out loud—just like a real interview</span>
             </li>
             <li className="flex items-start">
               <span className="text-indigo-500 mr-3 text-xl">›</span>
-              <span>The AI will clarify your questions</span>
+              <span>Loopie listens and asks questions if needed.</span>
             </li>
             <li className="flex items-start">
               <span className="text-indigo-500 mr-3 text-xl">›</span>
-              <span>After, get tailored feedback from your coach (Loopie) based on what you said</span>
+              <span>After the interview, you get specific, coaching-style feedback tied to what you said, so you can improve.</span>
             </li>
           </ul>
         </div>
@@ -46,7 +46,7 @@ export default function Home() {
       <section className="w-full bg-purple-50 py-16 sm:py-20">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-3xl font-bold text-gray-800 text-center mb-4">
-            🪄 What Loopie gives you after you interview
+            🪄 What <span className="text-indigo-600">Loopie</span> gives you after you interview
           </h2>
           <p className="text-center text-gray-600 mx-auto mb-10 sm:mb-12 text-base sm:text-lg">
             These aren't generic tips. You'll get coaching tied to exactly what you said out loud.
