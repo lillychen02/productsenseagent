@@ -25,7 +25,11 @@ const PhoneDisabledIcon = ({ className = "w-6 h-6", fill = "currentColor" }: { c
   </svg>
 );
 
-export function Conversation() {
+export interface ConversationProps {
+  onInterviewActiveChange?: (isActive: boolean) => void;
+}
+
+export function Conversation({ onInterviewActiveChange }: ConversationProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isRubricLoading, setIsRubricLoading] = useState<boolean>(true);
@@ -176,11 +180,13 @@ export function Conversation() {
     onConnect: () => {
       logClient('ElevenLabs SDK: onConnect - Voice agent connected.');
       setIsTimerRunning(true);
-      setScoreResult(null); // Clear scores on new session
+      setScoreResult(null);
+      if (onInterviewActiveChange) onInterviewActiveChange(true);
     },
     onDisconnect: (reason: any) => {
       logClient('ElevenLabs SDK: onDisconnect - Voice agent disconnected.', reason || 'No specific reason provided by SDK.');
       setIsTimerRunning(false);
+      if (onInterviewActiveChange) onInterviewActiveChange(false);
       if (!isScoring) {
         // alert("Interview disconnected."); // Or a more specific message based on context
       }
@@ -194,6 +200,7 @@ export function Conversation() {
         logClient(`ElevenLabs SDK: Interruption occurred - Reason: ${reason}, SessionId: ${currentSessionIdFromRef}`);
         setIsTimerRunning(false);
         alert(`Session interrupted: ${reason}`);
+        if (onInterviewActiveChange) onInterviewActiveChange(false);
         return;
       }
       if (message && message.message && typeof message.message === 'string') {
@@ -212,6 +219,7 @@ export function Conversation() {
     onError: (error: any) => {
       logClient('ElevenLabs SDK: onError - An error occurred.', error);
       setIsTimerRunning(false);
+      if (onInterviewActiveChange) onInterviewActiveChange(false);
       alert(`An SDK error occurred: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setIsScoring(false);
     },
@@ -299,7 +307,7 @@ export function Conversation() {
     } finally {
       setIsLoading(false);
     }
-  }, [conversation, defaultRubricId, defaultRubricName, isRubricLoading]);
+  }, [conversation, defaultRubricId, defaultRubricName, isRubricLoading, onInterviewActiveChange]);
 
   const stopConversation = useCallback(async () => {
     logClient('stopConversation: Initiated.');
@@ -316,7 +324,15 @@ export function Conversation() {
     setTimeout(() => {
         scoreCurrentSession(); 
     }, 3000); 
-  }, [conversation, scoreCurrentSession]);
+    if (onInterviewActiveChange) onInterviewActiveChange(false);
+  }, [conversation, scoreCurrentSession, onInterviewActiveChange]);
+
+  // Initial state check - if conversation status is not connected, it's not active.
+  useEffect(() => {
+    if (conversation.status !== 'connected') {
+      if (onInterviewActiveChange) onInterviewActiveChange(false);
+    }
+  }, [conversation.status, onInterviewActiveChange]);
 
   const buttonVariants = {
     hidden: { opacity: 0, scale: 0.9 },
