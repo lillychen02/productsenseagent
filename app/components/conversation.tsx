@@ -326,7 +326,7 @@ export function Conversation() {
 
   return (
     <div className="flex flex-col items-center gap-4 w-full conversation-container pt-2 pb-6 px-6">
-      <div className="flex gap-2 justify-center h-12 relative">
+      <div className="flex gap-2 justify-center h-20 relative">
         <AnimatePresence mode='wait' initial={false}>
           {conversation.status !== 'connected' && !isLoading && !isScoring && (
             <motion.button
@@ -337,17 +337,17 @@ export function Conversation() {
               exit="exit"
               onClick={startConversation}
               disabled={isRubricLoading}
-              className="p-3 bg-gray-100 rounded-full hover:bg-gray-200 disabled:opacity-50 transition-colors flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+              className="p-5 bg-gray-100 rounded-full hover:bg-gray-200 disabled:opacity-50 transition-colors flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
               aria-label="Start your interview (voice only)"
               title="Start your interview (voice only)"
             >
               {isRubricLoading ? (
-                <svg className="animate-spin h-5 w-5 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <svg className="animate-spin h-8 w-8 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
               ) : (
-                <SoundWaveIcon className="w-14 h-8 fill-indigo-600 hover:fill-indigo-700" />
+                <SoundWaveIcon className="w-20 h-12 fill-indigo-600 hover:fill-indigo-700" />
               )}
             </motion.button>
           )}
@@ -360,11 +360,11 @@ export function Conversation() {
               animate="visible"
               exit="exit"
               disabled
-              className="p-3 rounded-full flex items-center justify-center bg-gray-100 focus:outline-none"
+              className="p-5 rounded-full flex items-center justify-center bg-gray-100 focus:outline-none"
               aria-label="Connecting"
               title="Connecting..."
             >
-              <svg className="animate-spin h-5 w-5 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <svg className="animate-spin h-8 w-8 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
@@ -424,11 +424,11 @@ export function Conversation() {
               animate="visible"
               exit="exit"
               disabled
-              className="p-3 bg-gray-100 rounded-full flex items-center justify-center focus:outline-none"
+              className="p-5 bg-gray-100 rounded-full flex items-center justify-center focus:outline-none"
               aria-label="Scoring"
               title="Scoring..."
             >
-              <svg className="animate-spin h-5 w-5 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <svg className="animate-spin h-8 w-8 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>

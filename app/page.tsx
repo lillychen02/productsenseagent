@@ -2,7 +2,7 @@ import { Conversation } from './components/conversation'
 
 export default function Home() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-6 bg-white">
+    <main className="flex min-h-screen flex-col items-center p-6 pt-10 bg-white">
       <div className="w-full max-w-2xl mx-auto flex flex-col items-center text-center">
         <h1 className="text-3xl sm:text-4xl font-bold mb-3 bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">
           Product Sense Interview
