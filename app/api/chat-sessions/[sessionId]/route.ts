@@ -4,24 +4,16 @@ import connectMongoose from '@/lib/mongoose'; // Import Mongoose connect utility
 import { ChatSessionModel } from '@/models/chatSession';
 import { ChatSession } from '@/types'; // Import the ChatSession interface
 
-// Define the Params type as suggested for context
-type RouteContextParams = {
-  params: {
-    sessionId: string;
-  };
-};
-
 export async function GET(
   request: NextRequest,
-  context: RouteContextParams // Use the defined type
+  context: any // Let TypeScript infer, or use 'any' if strict mode requires some type
 ) {
-  console.log('[API /api/chat-sessions/[sessionId]] GET context:', context); // Log the context
-  const { sessionId } = context.params;
-  console.log('[API /api/chat-sessions/[sessionId]] Extracted sessionId:', sessionId); // Log the extracted sessionId
+  // Assuming TS infers context correctly, or context.params will be checked at runtime
+  const sessionId = context.params?.sessionId; // Optional chaining for safety if params might be undefined
 
   if (!sessionId) {
-    console.error('[API /api/chat-sessions/[sessionId]] Error: Missing sessionId in params.');
-    return NextResponse.json({ error: 'Session ID is required' }, { status: 400 });
+    // console.error('[API /api/chat-sessions/[sessionId]] Error: Missing sessionId in params.'); // Re-commenting for brevity now
+    return NextResponse.json({ error: 'Session ID is required or context.params is not structured as expected.' }, { status: 400 });
   }
 
   try {
@@ -33,7 +25,7 @@ export async function GET(
     const chatSessionDoc = await ChatSessionModel.findOne({ sessionId }).lean<ChatSession>();
     
     if (!chatSessionDoc) {
-      console.log(`[API /api/chat-sessions/[sessionId]] No chat session found for sessionId: ${sessionId}, returning empty messages.`);
+      // console.log(`[API /api/chat-sessions/[sessionId]] No chat session found for sessionId: ${sessionId}, returning empty messages.`);
       return NextResponse.json({ sessionId, messages: [] });
     }
 
@@ -46,11 +38,11 @@ export async function GET(
     });
 
   } catch (error) {
-    console.error(`[API /api/chat-sessions/[sessionId]] Error fetching chat session for ${sessionId}:`, error);
     let errorMessage = 'Internal Server Error';
     if (error instanceof Error) {
         errorMessage = error.message;
     }
+    console.error(`[API /api/chat-sessions/[sessionId]] Error fetching chat session for ${sessionId}:`, error); // Keep this error log
     return NextResponse.json({ error: 'Failed to fetch chat session', details: errorMessage }, { status: 500 });
   }
 }
