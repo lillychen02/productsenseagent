@@ -64,9 +64,7 @@ export async function POST(request: NextRequest) {
         }
     }
 
-    const subject = userName 
-      ? `Your Loopie Interview Results, ${userName}!` 
-      : 'Your Loopie Interview Results!';
+    const subject = "Your Loopie interview feedback - where you shined & what to work on💡";
 
     const emailHtml = createSimpleEmailHtml(userName, interviewReportData);
     

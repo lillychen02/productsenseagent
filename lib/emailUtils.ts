@@ -20,14 +20,14 @@ export const createSimpleEmailHtml = (userName: string | undefined, data: Interv
       }
 
       if (actualFeedback && actualFeedback.weaknesses && actualFeedback.weaknesses.length > 0 && actualFeedback.weaknesses[0] !== "Not reached.") {
-        detailHtml += `<p style="margin-top: 10px; margin-bottom: 5px; font-size: 14px; color: #4A5568;"><strong>Areas for improvement:</strong></p>`;
+        detailHtml += `<p style="margin-top: 10px; margin-bottom: 5px; font-size: 14px; color: #4A5568;"><strong>What You Can Improve:</strong></p>`;
         detailHtml += `<ul style="margin-top: 0; padding-left: 20px; font-size: 14px; color: #4A5568; margin-bottom: 10px;">`;
         actualFeedback.weaknesses.forEach(w => { detailHtml += `<li style="margin-bottom: 4px;">${w}</li>`; });
         detailHtml += `</ul>`;
       }
 
       if (actualFeedback && actualFeedback.exemplar_response_suggestion) {
-        detailHtml += `<p style="margin-top: 10px; margin-bottom: 5px; font-size: 14px; color: #4A5568;"><strong>Suggestion for next time:</strong></p>`;
+        detailHtml += `<p style="margin-top: 10px; margin-bottom: 5px; font-size: 14px; color: #4A5568;"><strong>Try this Next Time:</strong></p>`;
         detailHtml += `<p style="font-size: 14px; color: #4A5568; font-style: italic;">${actualFeedback.exemplar_response_suggestion}</p>`;
       }
       detailHtml += `</div>`;
@@ -66,6 +66,7 @@ export const createSimpleEmailHtml = (userName: string | undefined, data: Interv
     <html>
       <head>
         <style type="text/css">
+          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
           body {
             font-family: 'Inter', Arial, sans-serif;
             line-height: 1.6; /* Increased from 1.5 for better readability based on common practice */
