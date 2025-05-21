@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { ChatBubbleIcon } from './ChatBubbleIcon';
 import { AskLoopieSidebar } from './AskLoopieSidebar';
 import { motion, AnimatePresence } from 'framer-motion';
+import InlineEmailForm from '../../components/InlineEmailForm';
+import { type InterviewData as EmailReportData } from '../../../lib/types/email'; // Updated import path
 
 // Minimal interfaces for data fetched - align with api/results/[sessionId]/route.ts
 interface ScoreItem {
@@ -66,6 +68,14 @@ const RetryIcon = ({ className = "w-5 h-5", fill = "currentColor" }: { className
   </svg>
 );
 
+// New Mail Icon SVG component for the footer
+const FooterMailIcon = ({ className = "w-5 h-5", fill = "currentColor" }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill={fill} className={className}>
+    <path d="M3 4a2 2 0 00-2 2v1.161l8.441 4.221a1.25 1.25 0 001.118 0L19 7.162V6a2 2 0 00-2-2H3z" />
+    <path d="M19 8.839l-7.77 3.885a2.75 2.75 0 01-2.46 0L1 8.839V14a2 2 0 002 2h14a2 2 0 002-2V8.839z" />
+  </svg>
+);
+
 // Helper function to get emoji for score
 const getScoreEmoji = (score: number | null): string => {
   if (score === 1) return '🔴';
@@ -101,6 +111,8 @@ export default function ResultsPage() {
   const [initialLoopieMessage, setInitialLoopieMessage] = useState<string | undefined>(undefined);
   const feedbackContentRef = useRef<HTMLDivElement>(null);
   const elaborateButtonRef = useRef<HTMLButtonElement>(null);
+  const emailFormRef = useRef<HTMLDivElement>(null);
+  const [isSubmittingEmail, setIsSubmittingEmail] = useState(false); // For loading state on email form
 
   useEffect(() => {
     if (sessionId) {
@@ -125,6 +137,60 @@ export default function ResultsPage() {
       fetchResults();
     }
   }, [sessionId]);
+
+  const handleEmailSubmit = async (email: string) => {
+    if (!resultData || !resultData.scoreData) {
+      console.error("handleEmailSubmit: No resultData available to send.");
+      throw new Error("Interview results are not loaded yet. Please wait and try again.");
+    }
+    if (isSubmittingEmail) return;
+
+    setIsSubmittingEmail(true);
+
+    const reportDataForEmail: EmailReportData = {
+      recommendation: resultData.scoreData.llmResponse?.overall_recommendation || 'N/A',
+      date: new Date(resultData.scoreData.scoredAt).toLocaleDateString(),
+      interviewType: resultData.scoreData.rubricName || 'General Interview',
+      skills: resultData.scoreData.llmResponse?.scores?.map(skill => ({
+        name: skill.dimension,
+        score: skill.score,
+        emoji: getScoreEmoji(skill.score),
+        feedback: { // Populate the detailed feedback
+          strengths: skill.feedback?.strengths || [],
+          weaknesses: skill.feedback?.weaknesses || [],
+          exemplar_response_suggestion: skill.feedback?.exemplar_response_suggestion
+        }
+      })) || [],
+      summary: resultData.scoreData.llmResponse?.summary_feedback || 'No summary provided.',
+      sessionLink: `${process.env.NEXT_PUBLIC_APP_URL || 'https://askloopie.com'}/results/${sessionId}`,
+    };
+
+    try {
+      const response = await fetch('/api/send-results', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: email, 
+          interviewReportData: reportDataForEmail,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: "Failed to send email. Please try again." }));
+        throw new Error(errorData.message || `API Error: ${response.status}`);
+      }
+      
+      console.log("Email results API call successful");
+
+    } catch (error: any) {
+      console.error("Failed to send email results:", error);
+      throw error; 
+    } finally {
+      setIsSubmittingEmail(false);
+    }
+  };
 
   const handleDownloadTranscript = () => {
     if (resultData?.transcriptText) {
@@ -208,8 +274,17 @@ export default function ResultsPage() {
 
     if (selectedText && selection && selection.rangeCount > 0) {
       const range = selection.getRangeAt(0);
+
+      // Check if the selection is within the email form
+      if (emailFormRef.current && emailFormRef.current.contains(range.commonAncestorContainer)) {
+        // If selection is within email form, ensure the elaborate button is hidden
+        if (selectionAction.visible) {
+            setSelectionAction({ visible: false, selectedText: '', top: 0, left: 0, width: 0 });
+        }
+        return; // Don't show elaborate button for email form text
+      }
+
       const rect = range.getBoundingClientRect();
-      
       let newTop = rect.bottom + window.scrollY + 8;
       let newLeft = rect.left + window.scrollX + (rect.width / 2);
 
@@ -221,8 +296,15 @@ export default function ResultsPage() {
         width: rect.width
       });
     } else {
-      if (selectionAction.visible && event.target !== elaborateButtonRef.current) {
-        
+      // This part handles clicks outside of a selection to hide the button
+      // Check if the click target is the elaborate button itself
+      if (elaborateButtonRef.current && elaborateButtonRef.current.contains(event.target as Node)) {
+        // Click was on the elaborate button, do nothing here, let its onClick handle it
+        return;
+      }
+      // If a selection was previously visible and the click is not on the button, hide it.
+      if (selectionAction.visible) {
+         setSelectionAction({ visible: false, selectedText: '', top: 0, left: 0, width: 0 });
       }
     }
   };
@@ -298,21 +380,15 @@ export default function ResultsPage() {
 
   return (
     <div className={`min-h-screen bg-white font-sans transition-all duration-300 ease-in-out ${isSidebarOpen ? SIDEBAR_WIDTH_CLASS : 'mr-0'} pb-24`}>
-      <div ref={feedbackContentRef} onMouseUp={handleTextMouseUp} className="px-4 sm:px-6 lg:px-8 pb-24">
-        <main className={`max-w-4xl ${isSidebarOpen ? 'mx-0' : 'mx-auto'} bg-white pt-2 px-8 pb-8 sm:pt-4 sm:px-10 sm:pb-10`}>
-          <header className="mb-8 pb-6 border-b border-gray-200">
-            <h1 className="text-3xl font-bold text-gray-800 mb-3">
+      <div ref={feedbackContentRef} onMouseUp={handleTextMouseUp} className="w-full px-4 sm:px-6 mx-auto pb-24">
+        <main className={`max-w-3xl ${isSidebarOpen ? 'mr-0' : 'mx-auto'} bg-white pt-2 sm:pt-4 pb-8 sm:pb-10`}>
+          <header className="mb-4 pb-6 border-b border-gray-200 text-left">
+            <h1 className="text-3xl font-bold text-gray-800 mb-3 leading-relaxed">
               {motivationalHeaderDetails.emoji && <span className="mr-2">{motivationalHeaderDetails.emoji}</span>}
               {motivationalHeaderDetails.text}
             </h1>
-            <div className="text-sm text-gray-500 space-y-0.5 mt-2 mb-3">
-              <p>
-                Recommendation: <span className={`font-semibold ${motivationalHeaderDetails.subtextColorClass}`}>
-                  {scoreData.llmResponse?.overall_recommendation || 'N/A'}
-                </span>
-              </p>
+            <div className="text-sm text-gray-500 space-y-0.5 mt-2 mb-3 leading-relaxed">
               <p>Date: <span className="font-normal text-gray-600">{new Date(scoreData.scoredAt).toLocaleDateString()}</span></p>
-              <p>Interview Type: <span className="font-normal text-gray-600">{scoreData.rubricName || 'N/A'}</span></p>
             </div>
             {scoreData.llmResponse?.summary_feedback && (
               <p className="text-base text-gray-600 leading-relaxed mt-3">
@@ -321,9 +397,11 @@ export default function ResultsPage() {
             )}
           </header>
 
+          {sessionId && <InlineEmailForm ref={emailFormRef} onSubmit={handleEmailSubmit} sessionId={sessionId} />}
+
           {scoreData.llmResponse?.scores && scoreData.llmResponse.scores.length > 0 && (
-            <section className="mb-8">
-              <h2 className="text-2xl font-bold text-gray-800 mb-4">Your Skills at a Glance</h2>
+            <section className="mb-8 text-left">
+              <h2 className="text-2xl font-bold text-indigo-600 mb-4 leading-relaxed">Your Skills at a Glance</h2>
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
@@ -361,12 +439,12 @@ export default function ResultsPage() {
 
           <hr className="my-8 border-gray-300"/>
 
-          <section className="mb-10">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">Deep Dive By Skills</h2>
+          <section className="mb-10 text-left">
+            <h2 className="text-2xl font-bold text-indigo-600 mb-6 leading-relaxed">Deep Dive By Skills</h2>
             <div className="space-y-8">
               {scoreData.llmResponse?.scores?.map((item: ScoreItem, index: number) => (
                 <div key={index} id={generateSkillId(item.dimension)} className="scroll-mt-20">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-3">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-3 leading-relaxed">
                     {item.dimension}
                     <span className="ml-2">
                       {getScoreEmoji(item.score)}
@@ -378,10 +456,10 @@ export default function ResultsPage() {
                   
                   {item.feedback?.strengths && item.feedback.strengths.length > 0 && item.feedback.strengths[0] !== "Not reached." && (
                     <div className="mt-2 mb-3">
-                      <h4 className="text-md font-semibold text-gray-700 mb-1"><span className="mr-1.5">✅</span>What You Did Well</h4>
+                      <h4 className="text-md font-semibold text-gray-700 mb-1 leading-relaxed"><span className="mr-1.5">✅</span>What You Did Well</h4>
                       <ul className="list-disc list-outside text-gray-600 space-y-1">
                         {item.feedback.strengths.map((strength, sIdx) => (
-                          <li key={`s-${index}-${sIdx}`} className="ml-8">{strength}</li>
+                          <li key={`s-${index}-${sIdx}`} className="ml-8 text-base leading-relaxed">{strength}</li>
                         ))}
                       </ul>
                     </div>
@@ -389,10 +467,10 @@ export default function ResultsPage() {
 
                   {item.feedback?.weaknesses && item.feedback.weaknesses.length > 0 && item.feedback.weaknesses[0] !== "Not reached." && (
                     <div className="mt-2 mb-3">
-                      <h4 className="text-md font-semibold text-gray-700 mb-1"><span className="mr-1.5">❌</span>What Could Be Stronger</h4>
+                      <h4 className="text-md font-semibold text-gray-700 mb-1 leading-relaxed"><span className="mr-1.5">❌</span>What Could Be Stronger</h4>
                       <ul className="list-disc list-outside text-gray-600 space-y-1">
                         {item.feedback.weaknesses.map((weakness, wIdx) => (
-                          <li key={`w-${index}-${wIdx}`} className="ml-8">{weakness}</li>
+                          <li key={`w-${index}-${wIdx}`} className="ml-8 text-base leading-relaxed">{weakness}</li>
                         ))}
                       </ul>
                     </div>
@@ -400,8 +478,8 @@ export default function ResultsPage() {
 
                   {item.score !== null && item.score < 4 && item.feedback?.exemplar_response_suggestion && (
                     <div className="mt-3 pt-3 border-t border-dashed border-gray-300">
-                      <h4 className="text-md font-semibold text-gray-700 mb-1"><span className="mr-1.5">💡</span>Try This Next Time</h4>
-                      <p className="text-sm text-gray-600 italic ml-7">{item.feedback.exemplar_response_suggestion}</p>
+                      <h4 className="text-md font-semibold text-gray-700 mb-1 leading-relaxed"><span className="mr-1.5">💡</span>Try This Next Time</h4>
+                      <p className="text-sm text-gray-600 italic ml-7 leading-relaxed">{item.feedback.exemplar_response_suggestion}</p>
                     </div>
                   )}
 
@@ -517,6 +595,7 @@ export default function ResultsPage() {
         sessionId={sessionId} 
         initialMessage={initialLoopieMessage}
       />
+
     </div>
   );
 } 

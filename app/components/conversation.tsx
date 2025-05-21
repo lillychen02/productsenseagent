@@ -166,7 +166,7 @@ export function Conversation({ onInterviewActiveChange, onScoringStateChange }: 
       }
       const result = await response.json();
       if (result.score) {
-        alert('Session scored! Redirecting...');
+        console.log('Scoring successful, scoreData:', result.score);
         router.push(`/results/${currentSessionId}`);
       } else {
         alert('Scoring completed, but no score data was returned. Cannot redirect.');
@@ -470,7 +470,7 @@ export function Conversation({ onInterviewActiveChange, onScoringStateChange }: 
 
       {internalIsScoring && !scoreResult && (
         <div className="w-full mt-4 p-4 text-center text-gray-600">
-          Scoring interview, please wait...
+          Loopie is generating your feedback...
         </div>
       )}
     </div>
