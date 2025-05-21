@@ -117,7 +117,7 @@ const InlineEmailForm = forwardRef<HTMLDivElement, InlineEmailFormProps>(({ onSu
             </div>
             <button
               type="submit"
-              className="px-5 py-3 bg-indigo-500 text-white font-semibold hover:bg-indigo-600 focus:outline-none disabled:opacity-70 whitespace-nowrap"
+              className="px-3 sm:px-5 py-3 bg-indigo-500 text-white font-semibold hover:bg-indigo-600 focus:outline-none disabled:opacity-70 whitespace-nowrap"
               disabled={isSubmitting}
               aria-label={isSubmitting ? "Sending results" : "Email My Results"}
             >
