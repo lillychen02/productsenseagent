@@ -154,11 +154,9 @@ export async function POST(request: NextRequest) {
     if (callStatus === 'done') {
       console.log(`[WEBHOOK ACTION] Conditions MET for session ${webhookSessionIdFromPayload} (callStatus is 'done'). Triggering scoring with rubricId: ${rubricIdToUse}. End Reason was: '${endReason}'`);
       
-      const baseUrl = process.env.NODE_ENV === 'development' 
-        ? 'http://localhost:3000' 
-        : request.url; 
-      
-      const scoreSessionUrl = new URL('/api/score-session', baseUrl).toString();
+      // Use NEXT_PUBLIC_APP_URL for a more robust base URL construction
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'; 
+      const scoreSessionUrl = `${appUrl}/api/score-session`;
       console.log(`[WEBHOOK ACTION] Calling internal score-session URL: ${scoreSessionUrl}`);
 
       fetch(scoreSessionUrl, {
