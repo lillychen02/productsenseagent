@@ -28,7 +28,11 @@ interface DiscordWebhookPayload {
 
 export async function sendDiscordAlert(title: string, description: string, fields?: DiscordEmbedField[], color: number = 0xFF0000 /* Red by default */) {
   if (!DISCORD_WEBHOOK_URL) {
-    logger.warn('DiscordAlertSkipped', { title }, "Discord webhook URL not configured. Alert not sent.");
+    logger.warn({ 
+      event: 'DiscordAlertSkipped', 
+      message: "Discord webhook URL not configured. Alert not sent.", 
+      details: { title } 
+    });
     return;
   }
 
@@ -59,11 +63,21 @@ export async function sendDiscordAlert(title: string, description: string, field
 
     if (!response.ok) {
       const responseText = await response.text();
-      logger.error('DiscordAlertError', { title, status: response.status, statusText: response.statusText, responseBody: responseText }, `Error sending Discord alert`);
+      logger.error({ 
+        event: 'DiscordAlertError', 
+        message: `Error sending Discord alert: ${response.status} ${response.statusText}`,
+        details: { title, responseStatus: response.status, responseBody: responseText },
+        error: responseText // Storing main error detail here for now
+      });
     } else {
-      logger.info('DiscordAlertSent', { title });
+      logger.info({ event: 'DiscordAlertSent', details: { title } });
     }
   } catch (error: any) {
-    logger.error('DiscordAlertFetchFail', { title }, "Failed to send Discord alert due to fetch error.", error);
+    logger.error({ 
+      event: 'DiscordAlertFetchFail', 
+      message: "Failed to send Discord alert due to fetch error.", 
+      details: { title }, 
+      error: error 
+    });
   }
 } 
