@@ -9,6 +9,7 @@ import { sendDiscordAlert } from '../../../lib/monitoringUtils';
 
 const MAX_JOB_PROCESSING_ATTEMPTS = 3; // Default max attempts for a job if not set on job itself
 const PROCESSING_TIMEOUT_MS = 55000; // Time limit for processing a single job (e.g., 55s for Vercel Pro 60s limit)
+const CRON_SECRET_EXPECTED = process.env.CRON_SECRET;
 
 async function updateSessionMetadataStatus(sessionId: string, status: SessionStatus, error?: string | null) {
   // This is similar to the helper in /api/score-session, consider centralizing if identical
@@ -36,7 +37,24 @@ async function updateSessionMetadataStatus(sessionId: string, status: SessionSta
 
 // This endpoint will be triggered by a Vercel Cron Job
 export async function GET(request: NextRequest) {
-  logger.info({ event: 'ProcessScoringJobsStarted' });
+  // 1. Check Authorization header
+  if (!CRON_SECRET_EXPECTED) {
+    logger.error({ event: 'CronSecretMissingConfig', message: 'CRON_SECRET is not configured on the server for /api/process-scoring-jobs.' });
+    // Do not return a detailed error to the client for security, just a generic server error.
+    return new NextResponse('Configuration error', { status: 500 }); 
+  }
+
+  const authHeader = request.headers.get('authorization');
+  if (authHeader !== `Bearer ${CRON_SECRET_EXPECTED}`) {
+    logger.warn({ 
+      event: 'CronUnauthorizedAccess', 
+      message: 'Unauthorized attempt to access cron job endpoint /api/process-scoring-jobs.',
+      details: { receivedHeader: authHeader || "Not provided" }
+    });
+    return new NextResponse('Unauthorized', { status: 401 });
+  }
+
+  logger.info({ event: 'ProcessScoringJobsStarted', details: { authorized: true } });
   const { db } = await connectToDatabase();
   let jobProcessed = false;
 
