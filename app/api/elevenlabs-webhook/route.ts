@@ -2,36 +2,26 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { connectToDatabase } from '../../../lib/mongodb'; 
 import { ObjectId } from 'mongodb';
+import { sendDiscordAlert } from '../../../lib/monitoringUtils';
+import { logger } from '../../../lib/logger';
+import { type SessionStatus, type SessionMetadata, type EmailedResultLogEntry } from '../../../lib/types/session'; // Import from shared types
 
 const ELEVENLABS_WEBHOOK_SECRET = process.env.ELEVENLABS_WEBHOOK_SECRET;
 const FIVE_MINUTES_IN_SECONDS = 5 * 60;
-
-// Interface for data stored in sessions_metadata
-interface SessionMetadata {
-  _id?: ObjectId;
-  sessionId: string;
-  rubricId: ObjectId; // Stored as ObjectId
-  rubricName?: string; 
-  interviewType?: string;
-  startTime: Date;
-  status: string;
-  updatedAt: Date;
-}
+const MAX_RETRIES = 3;
+const INITIAL_BACKOFF_MS = 500;
 
 async function verifySignature(clonedRequest: Request): Promise<boolean> {
   if (!ELEVENLABS_WEBHOOK_SECRET) {
-    console.error('ElevenLabs Webhook Secret is not configured.');
+    logger.error({ event: 'WebhookSignatureVerificationError', message: 'ElevenLabs Webhook Secret is not configured.' });
     return false;
   }
-
   const signatureHeader = clonedRequest.headers.get('elevenlabs-signature');
   if (!signatureHeader) {
-    console.warn('Missing ElevenLabs-Signature header');
+    logger.warn({ event: 'WebhookSignatureVerificationWarning', message: 'Missing ElevenLabs-Signature header' });
     return false;
   }
-
-  const rawBody = await clonedRequest.text(); // Get raw body from the cloned request
-
+  const rawBody = await clonedRequest.text();
   try {
     const parts = signatureHeader.split(',').reduce((acc, part) => {
       const [key, value] = part.split('=');
@@ -43,7 +33,7 @@ async function verifySignature(clonedRequest: Request): Promise<boolean> {
     const receivedSignature = parts.v0;
 
     if (!timestamp || !receivedSignature) {
-      console.warn('Invalid signature header format.');
+      logger.warn({ event: 'WebhookSignatureVerificationWarning', message: 'Invalid signature header format.'});
       return false;
     }
 
@@ -51,7 +41,7 @@ async function verifySignature(clonedRequest: Request): Promise<boolean> {
     const currentTimestampSeconds = Math.floor(Date.now() / 1000);
 
     if (Math.abs(currentTimestampSeconds - receivedTimestampSeconds) > FIVE_MINUTES_IN_SECONDS) {
-      console.warn('Webhook timestamp is too old or too far in the future (replay attack?).');
+      logger.warn({ event: 'WebhookSignatureVerificationWarning', message: 'Webhook timestamp out of range.', details: { currentTimestampSeconds, receivedTimestampSeconds } });
       return false;
     }
 
@@ -63,155 +53,213 @@ async function verifySignature(clonedRequest: Request): Promise<boolean> {
     if (crypto.timingSafeEqual(Buffer.from(computedSignature, 'hex'), Buffer.from(receivedSignature, 'hex'))) {
       return true;
     }
-    console.warn('HMAC signature mismatch.');
+    logger.warn({ event: 'WebhookSignatureVerificationWarning', message: 'HMAC signature mismatch.'});
     return false;
 
-  } catch (error) {
-    console.error('Error during signature verification:', error);
+  } catch (error: any) {
+    logger.error({ event: 'WebhookSignatureVerificationError', message: 'Error during signature verification', error: error.message, details: { stack: error.stack } });
     return false;
   }
 }
 
 export async function POST(request: NextRequest) {
-  console.log('[WEBHOOK START] Received ElevenLabs Webhook request.');
+  logger.info({ event: 'WebhookReceived', details: { source: 'ElevenLabs'} });
 
   let webhookSessionIdFromPayload: string | undefined = undefined; // For logging in catch blocks
+  let db; // ensure db is defined in the scope if used in catch
+  let lastErrorForDb: string | null = null;
+  let triggerError: string | null = null;
+  let attempt = 0;
+  let success = false;
+  let rubricIdToUse: string = ''; // ensure initialized
+  let callStatus: string | undefined;
+  let endReason: string | undefined;
+  let sessionMeta: SessionMetadata | null = null; // Define sessionMeta here
 
   try {
     const requestCloneForVerification = request.clone();
     const requestCloneForJsonParsing = request.clone();
-    console.log('[WEBHOOK INFO] Request cloned for verification and parsing.');
+    logger.info({ event: 'WebhookInfo', message: 'Request cloned for verification and parsing.' });
 
     const isVerified = await verifySignature(requestCloneForVerification);
-    console.log(`[WEBHOOK INFO] Signature verification result: ${isVerified}`);
+    logger.info({ event: 'WebhookSignatureVerified', details: { result: isVerified } });
     if (!isVerified) {
-      console.warn('[WEBHOOK WARN] Webhook verification failed. Ignoring request.');
+      logger.warn({ event: 'WebhookVerificationFailed', message: 'Webhook verification failed. Ignoring request.'});
       return NextResponse.json({ error: 'Signature verification failed' }, { status: 401 });
     }
 
-    console.log('[WEBHOOK INFO] Webhook signature VERIFIED.');
+    logger.info({ event: 'WebhookSignatureVerified', message: 'Signature was valid.' }); // Explicit log for verified
 
     let payload;
     try {
       payload = await requestCloneForJsonParsing.json();
-      console.log('[WEBHOOK INFO] Webhook payload parsed successfully.');
+      logger.info({ event: 'WebhookInfo', message: 'Webhook payload parsed successfully.' });
       // console.log('[WEBHOOK PAYLOAD]', JSON.stringify(payload, null, 2)); // Verbose, uncomment if needed
     } catch (e: any) {
-      console.error('[WEBHOOK ERROR] Failed to parse webhook payload as JSON:', e.message);
+      logger.error({ event: 'WebhookError', message: 'Failed to parse webhook payload as JSON:', error: e.message });
       // Attempt to get raw body for logging if JSON parsing failed
       try {
         const rawBody = await request.clone().text(); // Need to clone again if original already used
-        console.error('[WEBHOOK ERROR] Raw webhook body for parsing error:', rawBody);
+        logger.error({ event: 'WebhookError', message: 'Raw webhook body for parsing error:', details: { rawBody }});
       } catch (rawBodyError: any) {
-        console.error('[WEBHOOK ERROR] Could not get raw body after JSON parse error:', rawBodyError.message);
+        logger.error({ event: 'WebhookError', message: 'Could not get raw body after JSON parse error:', error: rawBodyError.message });
       }
       return NextResponse.json({ error: 'Invalid JSON payload' }, { status: 400 });
     }
 
     webhookSessionIdFromPayload = payload.data?.conversation_id;
-    const callStatus = payload.data?.status;
-    const endReason = payload.data?.metadata?.termination_reason;
+    callStatus = payload.data?.status;
+    endReason = payload.data?.metadata?.termination_reason;
 
-    console.log(`[WEBHOOK DATA] Extracted - webhookSessionId: ${webhookSessionIdFromPayload}, callStatus: ${callStatus}, endReason: ${endReason}`);
+    logger.info({ event: 'WebhookDataExtracted', details: { sessionId: webhookSessionIdFromPayload, callStatus, endReason } });
 
     if (!webhookSessionIdFromPayload) {
-      console.error('[WEBHOOK ERROR] Webhook payload missing data.conversation_id.');
+      logger.error({ event: 'WebhookError', message: 'Webhook payload missing data.conversation_id.', details: { sessionId: webhookSessionIdFromPayload }});
       return NextResponse.json({ error: 'Missing session identifier (data.conversation_id) in payload' }, { status: 400 });
     }
 
-    const { db } = await connectToDatabase();
-    console.log(`[WEBHOOK DB] Attempting to find session metadata for sessionId: ${webhookSessionIdFromPayload}`);
-    const sessionMeta = await db.collection<SessionMetadata>('sessions_metadata').findOne({ sessionId: webhookSessionIdFromPayload });
+    ({ db } = await connectToDatabase());
+    logger.info({ event: 'WebhookDB', message: 'Attempting to find session metadata for sessionId:', details: { sessionId: webhookSessionIdFromPayload }});
+    sessionMeta = await db.collection<SessionMetadata>('sessions_metadata').findOne({ sessionId: webhookSessionIdFromPayload });
 
     if (!sessionMeta) {
-      console.error(`[WEBHOOK ERROR] No session metadata found for sessionId: ${webhookSessionIdFromPayload}. This ID should be the ElevenLabs conversation_id.`);
+      logger.error({ event: 'WebhookError', message: 'No session metadata found.', details: { sessionId: webhookSessionIdFromPayload }});
       return NextResponse.json({ message: 'Webhook received, but no session metadata found. Scoring not triggered.' }, { status: 200 });
     }
-    console.log(`[WEBHOOK DB] Found session metadata for sessionId: ${webhookSessionIdFromPayload}. Current status: ${sessionMeta.status}`);
+    logger.info({ event: 'WebhookSessionMetaFound', details: { sessionId: webhookSessionIdFromPayload, currentStatus: sessionMeta.status } });
 
-    const rubricIdToUse = sessionMeta.rubricId.toString();
+    rubricIdToUse = sessionMeta.rubricId.toString();
+    const now = new Date();
 
-    console.log(`[WEBHOOK DB] Attempting to update session metadata for ${webhookSessionIdFromPayload} to status: webhook_received.`);
+    // After payload verification -> set status='webhook_received'
     try {
       await db.collection<SessionMetadata>('sessions_metadata').updateOne(
         { sessionId: webhookSessionIdFromPayload }, 
-        { $set: { status: 'webhook_received', "payload.webhook_end_reason": endReason, "payload.webhook_call_status": callStatus, updatedAt: new Date() } }
+        { 
+          $set: { 
+            status: 'webhook_received', 
+            status_updated_at: now,
+            "payload.webhook_end_reason": endReason, 
+            "payload.webhook_call_status": callStatus, 
+            updatedAt: now 
+          }
+        }
       );
-      console.log(`[WEBHOOK DB] Successfully updated session metadata for ${webhookSessionIdFromPayload} with initial webhook data.`);
+      logger.info({ event: 'WebhookStatusUpdated', details: { sessionId: webhookSessionIdFromPayload, newStatus: 'webhook_received' } });
     } catch (dbUpdateError: any) {
-      console.error(`[WEBHOOK DB ERROR] Failed to update session metadata for ${webhookSessionIdFromPayload} after receiving webhook:`, dbUpdateError.message);
-      // Decide if you want to proceed or return an error. For now, proceeding but logging.
+      logger.error({ event: 'WebhookDBError', message: 'Failed to update session metadata for webhook_received', details: { sessionId: webhookSessionIdFromPayload }, error: dbUpdateError.message });
+      // Potentially critical, but let's see if scoring can still be triggered
     }
 
     const appropriateEndReasons = ['client disconnected', 'agent_completed_script', 'call_ended_by_agent', 'user_ended_call', 'completed', 'ended', 'call_ended', 'end_call tool was called.'];
     
-    console.log(`[WEBHOOK DECISION] Evaluating scoring for sessionId: ${webhookSessionIdFromPayload} - callStatus: '${callStatus}', endReason: '${endReason}' (lowercase: '${endReason?.toLowerCase()}')`);
-    console.log(`[WEBHOOK DECISION] Condition 1 (callStatus === 'done'): ${callStatus === 'done'}`);
-    console.log(`[WEBHOOK DECISION] Condition 2 (endReason exists): ${!!endReason}`);
-    console.log(`[WEBHOOK DECISION] Condition 3 (appropriateEndReasons includes endReason): ${endReason && appropriateEndReasons.includes(endReason.toLowerCase())}`);
+    logger.info({ event: 'WebhookDecisionInfo', details: { sessionId: webhookSessionIdFromPayload, callStatus, endReason } });
+    logger.info({ event: 'WebhookDecisionCondition', details: { condition: 'callStatus === done', value: callStatus === 'done' } });
+    logger.info({ event: 'WebhookDecisionCondition', details: { condition: 'endReason exists', value: !!endReason } });
+    logger.info({ event: 'WebhookDecisionCondition', details: { condition: 'appropriateEndReasons includes endReason', value: endReason && appropriateEndReasons.includes(endReason.toLowerCase()) } });
 
-    // Simplified condition: Score if callStatus is 'done', regardless of endReason
     if (callStatus === 'done') {
-      console.log(`[WEBHOOK ACTION] Conditions MET for session ${webhookSessionIdFromPayload} (callStatus is 'done'). Triggering scoring with rubricId: ${rubricIdToUse}. End Reason was: '${endReason}'`);
+      logger.info({ event: 'WebhookAction', message: 'Conditions MET. Attempting to enqueue scoring with retries.', details: { sessionId: webhookSessionIdFromPayload } });
       
-      // Use NEXT_PUBLIC_APP_URL for a more robust base URL construction
       const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'; 
       const scoreSessionUrl = `${appUrl}/api/score-session`;
-      console.log(`[WEBHOOK ACTION] Calling internal score-session URL: ${scoreSessionUrl}`);
+      
+      attempt = 0;
+      success = false;
+      lastErrorForDb = null;
 
-      fetch(scoreSessionUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: webhookSessionIdFromPayload, rubricId: rubricIdToUse }),
-      })
-      .then(async response => {
-        const statusUpdate = response.ok ? 'scoring_triggered' : 'error_scoring';
-        console.log(`[WEBHOOK DB] Score session call for ${webhookSessionIdFromPayload} responded. OK: ${response.ok}. Updating status to: ${statusUpdate}`);
+      while (attempt < MAX_RETRIES && !success) {
+        attempt++;
+        logger.info({ event: 'WebhookAction', message: `Enqueue attempt ${attempt}/${MAX_RETRIES}`, details: { sessionId: webhookSessionIdFromPayload, url: scoreSessionUrl } });
         try {
-          await db.collection<SessionMetadata>('sessions_metadata').updateOne(
-              { sessionId: webhookSessionIdFromPayload }, 
-              { $set: { status: statusUpdate, updatedAt: new Date() } }
-          );
-          console.log(`[WEBHOOK DB] Successfully updated session metadata for ${webhookSessionIdFromPayload} to status: ${statusUpdate}.`);
-        } catch (dbUpdateError: any) {
-          console.error(`[WEBHOOK DB ERROR] Failed to update session metadata for ${webhookSessionIdFromPayload} to status ${statusUpdate}:`, dbUpdateError.message);
+          const response = await fetch(scoreSessionUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: webhookSessionIdFromPayload, rubricId: rubricIdToUse }),
+            // Consider adding a timeout to the fetch call itself if your platform supports AbortController easily
+            // signal: AbortSignal.timeout(10000) // Example: 10 second timeout for the fetch
+          });
+
+          logger.info({ event: 'WebhookAction', message: `Internal call responded (attempt ${attempt})`, details: { sessionId: webhookSessionIdFromPayload, ok: response.ok, status: response.status } });
+
+          if (response.ok) {
+            success = true;
+            lastErrorForDb = null; // Clear any previous attempt errors
+            break; // Exit retry loop on success
+          }
+          
+          // If response not ok, prepare error for logging and potential retry
+          const errorData = await response.json().catch(() => ({ message: "Scoring API call failed with non-OK response, and failed to parse error JSON." }));
+          triggerError = errorData.message || `Scoring API error (attempt ${attempt}): ${response.status}`;
+          lastErrorForDb = triggerError; 
+          logger.warn({ event: 'WebhookEnqueueNonOkResponse', message: `Non-OK response from /api/score-session (attempt ${attempt})`, details: { sessionId: webhookSessionIdFromPayload, status: response.status }, error: triggerError });
+
+        } catch (fetchError: any) {
+          logger.warn({ event: 'WebhookEnqueueFetchError', message: `Fetch error (attempt ${attempt})`, details: { sessionId: webhookSessionIdFromPayload }, error: fetchError.message });
+          triggerError = fetchError.message || `Network error or scoring service unavailable (attempt ${attempt}).`;
+          lastErrorForDb = triggerError;
         }
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          console.error(`[WEBHOOK ERROR] Error calling /api/score-session for ${webhookSessionIdFromPayload}: ${response.status}`, errorData);
-        } else {
-          console.log(`[WEBHOOK INFO] Successfully triggered scoring for session ${webhookSessionIdFromPayload}.`);
+        if (!success && attempt < MAX_RETRIES) {
+          const delay = INITIAL_BACKOFF_MS * Math.pow(2, attempt - 1);
+          logger.info({ event: 'WebhookEnqueueRetryDelay', message: `Waiting ${delay}ms before next retry.`, details: { sessionId: webhookSessionIdFromPayload, delay } });
+          await new Promise(resolve => setTimeout(resolve, delay));
         }
-      })
-      .catch(async error => {
-        console.error(`[WEBHOOK ERROR] Fetch error when trying to trigger scoring for session ${webhookSessionIdFromPayload}:`, error);
-        try {
-          await db.collection<SessionMetadata>('sessions_metadata').updateOne(
-              { sessionId: webhookSessionIdFromPayload }, 
-              { $set: { status: 'error_scoring', updatedAt: new Date() } }
+      }
+
+      // Determine final status based on retry outcomes
+      const finalScoringTriggerStatus: SessionStatus = success ? 'scoring_enqueued' : 'scoring_enqueue_failed';
+      
+      try {
+        await db.collection<SessionMetadata>('sessions_metadata').updateOne(
+            { sessionId: webhookSessionIdFromPayload }, 
+            { 
+              $set: { 
+                status: finalScoringTriggerStatus, 
+                status_updated_at: new Date(), 
+                status_error: lastErrorForDb, 
+                updatedAt: new Date() 
+              }
+            }
+        );
+        logger.info({ event: 'WebhookEnqueueFinalStatusUpdate', details: { sessionId: webhookSessionIdFromPayload, status: finalScoringTriggerStatus, error: lastErrorForDb } });
+        
+        if (finalScoringTriggerStatus === 'scoring_enqueue_failed') {
+          sendDiscordAlert(
+            "Scoring Enqueue Failed", 
+            `Failed to enqueue scoring task for session ID: ${webhookSessionIdFromPayload} after ${MAX_RETRIES} retries.`, 
+            [{ name: "Session ID", value: webhookSessionIdFromPayload || 'N/A', inline: true }, { name: "Error", value: lastErrorForDb || 'N/A', inline: false }]
           );
-          console.log(`[WEBHOOK DB] Successfully updated session metadata for ${webhookSessionIdFromPayload} to status: error_scoring due to fetch error.`);
-        } catch (dbUpdateError: any) {
-          console.error(`[WEBHOOK DB ERROR] Failed to update session metadata for ${webhookSessionIdFromPayload} to status error_scoring:`, dbUpdateError.message);
         }
-      });
-      return NextResponse.json({ message: 'Webhook received, scoring triggered.' }, { status: 200 });
+      } catch (dbUpdateError: any) {
+        logger.error({ event: 'WebhookDBError', message: 'Failed to update session metadata after enqueue attempt', details: { sessionId: webhookSessionIdFromPayload, status: finalScoringTriggerStatus }, error: dbUpdateError.message });
+      }
+      
+      if (!success) {
+        return NextResponse.json({ message: 'Webhook received, but failed to enqueue scoring task after multiple retries.', internal_error: triggerError }, { status: 200 });
+      }
+      return NextResponse.json({ message: `Webhook received, scoring process initiated successfully after ${attempt} attempt(s).` }, { status: 200 });
+
     } else {
-      console.log(`[WEBHOOK ACTION] Conditions NOT MET for session ${webhookSessionIdFromPayload} (callStatus is '${callStatus}', not 'done'). Scoring not triggered. End Reason was: '${endReason}'`);
+      logger.info({ event: 'WebhookAction', message: 'Conditions NOT MET for session. Scoring not triggered.', details: { sessionId: webhookSessionIdFromPayload, callStatus } });
       try {
         await db.collection<SessionMetadata>('sessions_metadata').updateOne(
           { sessionId: webhookSessionIdFromPayload }, 
-          { $set: { status: 'webhook_received_not_scored', "payload.webhook_end_reason": endReason, "payload.webhook_call_status": callStatus, updatedAt: new Date() } }
+          { $set: { status: 'webhook_received_not_scored', status_updated_at: new Date(), "payload.webhook_end_reason": endReason, "payload.webhook_call_status": callStatus, updatedAt: new Date() } }
         );
-        console.log(`[WEBHOOK DB] Successfully updated session metadata for ${webhookSessionIdFromPayload} to status: webhook_received_not_scored.`);
+        logger.info({ event: 'WebhookStatusUpdated', details: { sessionId: webhookSessionIdFromPayload, newStatus: 'webhook_received_not_scored' } });
       } catch (dbUpdateError: any) {
-        console.error(`[WEBHOOK DB ERROR] Failed to update session metadata for ${webhookSessionIdFromPayload} to status webhook_received_not_scored:`, dbUpdateError.message);
+        logger.error({ event: 'WebhookDBError', message: 'Failed to update session to webhook_received_not_scored', details: { sessionId: webhookSessionIdFromPayload }, error: dbUpdateError.message });
       }
       return NextResponse.json({ message: 'Webhook received, scoring not applicable for this event.' }, { status: 200 });
     }
-  } catch (error: any) { // Catch any other errors
-    console.error(`[WEBHOOK CRITICAL] Unhandled error in webhook for session ${webhookSessionIdFromPayload || 'unknown'}:`, error.message, error.stack);
+  } catch (error: any) {
+    logger.error({
+      event: 'WebhookCriticalError',
+      message: `Unhandled error in webhook: ${error.message}`,
+      details: { sessionId: webhookSessionIdFromPayload || 'unknown' },
+      error: error // Pass the whole error object, which might include the stack
+    });
     return NextResponse.json({ error: 'Failed to process webhook due to an unexpected error' }, { status: 500 });
   }
 } 

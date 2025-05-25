@@ -173,7 +173,9 @@ export default function ResultsPage() {
         },
         body: JSON.stringify({
           email: email, 
+          userName: undefined, // Or pass actual userName if available and desired
           interviewReportData: reportDataForEmail,
+          sessionId: sessionId // Add sessionId to the payload
         }),
       });
 

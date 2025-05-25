@@ -3,6 +3,7 @@ import { type InterviewData, type SkillFeedback } from '../../../lib/types/email
 import { createSimpleEmailHtml } from '../../../lib/emailUtils';
 import { connectToDatabase } from '../../../lib/mongodb'; // Adjust path as per your project structure
 import { ObjectId } from 'mongodb';
+import { logger } from '../../../lib/logger'; // Import refined logger
 
 // Interfaces for DB data (can be shared if defined elsewhere, e.g., from send-results or results page)
 interface ScoreItem {
@@ -39,6 +40,7 @@ export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const sessionIdFromQuery = url.searchParams.get("sessionId");
   const userName = url.searchParams.get("userName") || "Valued User";
+  logger.info('PreviewEmailRequest', { sessionId: sessionIdFromQuery, userName });
 
   let reportData: InterviewData;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://askloopie.com';
@@ -69,18 +71,20 @@ export async function GET(request: NextRequest) {
         summary: scoreData.llmResponse?.summary_feedback || 'No summary provided.',
         sessionLink: `${appUrl}/results/${sessionIdFromQuery}`,
       };
+      logger.info('PreviewEmailDataFetched', { sessionId: sessionIdFromQuery });
     } catch (error: any) {
-      console.error(`Error fetching data for preview (sessionId: ${sessionIdFromQuery}):`, error);
+      logger.error('PreviewEmailDataFetchError', { sessionId: sessionIdFromQuery }, error.message, error);
       reportData = {
-        recommendation: "Error Loading Data",
+        recommendation: "Error Loading Data for Preview",
         date: new Date().toLocaleDateString(),
         interviewType: "Data Fetch Error",
         skills: [],
-        summary: `Could not load data for session ${sessionIdFromQuery}. Error: ${error.message}`,
-        sessionLink: `${appUrl}/results/error-session`,
+        summary: `Could not load data for session ${sessionIdFromQuery} for preview. Error: ${error.message}`,
+        sessionLink: "#",
       };
     }
   } else {
+    logger.info('PreviewEmailUsingMockData');
     // Fallback to mock data if no sessionId is provided
     reportData = {
       recommendation: "Hire (Mock Data)",
@@ -96,6 +100,7 @@ export async function GET(request: NextRequest) {
     };
   }
 
+  // @ts-ignore - reportData will be assigned in one of the branches
   const htmlContent = createSimpleEmailHtml(userName, reportData);
 
   return new NextResponse(htmlContent, {
