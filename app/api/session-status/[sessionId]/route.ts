@@ -34,9 +34,9 @@ interface SessionMetadataDbModel { // What's actually in the DB
 
 export async function GET(
   request: NextRequest,
-  context: { params: { sessionId: string } }
+  { params }: { params: { sessionId: string } }
 ) {
-  const sessionId = context.params.sessionId;
+  const sessionId = params.sessionId;
 
   if (!sessionId) {
     return NextResponse.json({ error: 'Session ID is required' }, { status: 400 });
