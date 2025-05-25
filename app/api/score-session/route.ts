@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { connectToDatabase } from '../../../lib/mongodb';
 import { ObjectId } from 'mongodb';
 import OpenAI from 'openai';
+import { type SessionStatus, type SessionMetadata } from '../../../lib/types/session'; // Import from shared types
+import { sendDiscordAlert } from '../../../lib/monitoringUtils'; // Import the alert function
+import { logger, LogPayload } from '../../../lib/logger'; // Import logger
 
 // Updated Rubric Interfaces to match the new structure
 interface ScoringDetail {
@@ -110,19 +113,54 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Helper function to update session metadata status
+async function updateSessionStatus(sessionId: string, status: SessionStatus, error?: string | null) {
+  try {
+    const { db } = await connectToDatabase();
+    const now = new Date();
+    await db.collection('sessions_metadata').updateOne(
+      { sessionId }, 
+      { $set: { status: status, status_updated_at: now, status_error: error === undefined ? null : error, updatedAt: now }}
+    );
+    logger.info({ event: 'SessionStatusUpdated', details: { sessionId, status, error: error || undefined } });
+
+    if (status === 'scoring_failed_llm' || status === 'scoring_failed_db') {
+      sendDiscordAlert(
+        `Scoring Failed: ${status.replace('scoring_failed_', '').toUpperCase()}`, // e.g., "Scoring Failed: LLM"
+        `Scoring process failed for session ID: ${sessionId}.`, 
+        [
+          { name: "Session ID", value: sessionId, inline: true },
+          { name: "Status", value: status, inline: true },
+          { name: "Error", value: error || 'No specific error message provided.', inline: false }
+        ]
+      );
+      logger.info({event: 'DiscordAlertSentForScoringFailure', details: { sessionId, status, error }});
+    }
+  } catch (dbError: any) {
+    logger.error({ event: 'UpdateSessionStatusError', details: { sessionId, status, attemptedError: error }, error: { message: dbError.message, stack: dbError.stack } });
+  }
+}
+
 export async function POST(request: Request) {
   if (!process.env.OPENAI_API_KEY) {
-    console.error('OPENAI_API_KEY is not configured.');
+    logger.error({event: 'OpenAIKeyMissing', message: 'OPENAI_API_KEY is not configured.'});
     return NextResponse.json({ error: 'Server configuration error: Missing OpenAI API key.' }, { status: 500 });
   }
 
+  let sessionId: string | undefined;
+  let rubricId: string | undefined;
+
   try {
     const body = await request.json();
-    const { sessionId, rubricId } = body as { sessionId: string; rubricId: string };
+    sessionId = body.sessionId as string;
+    rubricId = body.rubricId as string;
 
     if (!sessionId || !rubricId) {
       return NextResponse.json({ error: 'Missing sessionId or rubricId' }, { status: 400 });
     }
+    
+    logger.info({event: 'ScoreSessionRequestReceived', details: { sessionId, rubricId }});
+    await updateSessionStatus(sessionId, 'scoring_in_progress');
 
     const { db } = await connectToDatabase();
 
@@ -132,6 +170,7 @@ export async function POST(request: Request) {
       .toArray();
 
     if (!transcripts || transcripts.length === 0) {
+      await updateSessionStatus(sessionId, 'scoring_failed_db', `No transcripts found for sessionId: ${sessionId}`);
       return NextResponse.json({ error: `No transcripts found for sessionId: ${sessionId}` }, { status: 404 });
     }
 
@@ -141,11 +180,13 @@ export async function POST(request: Request) {
     try {
       mongoRubricId = new ObjectId(rubricId);
     } catch (e) {
+      await updateSessionStatus(sessionId, 'scoring_failed_db', 'Invalid rubricId format received.');
       return NextResponse.json({ error: 'Invalid rubricId format' }, { status: 400 });
     }
     const rubric = await db.collection<Rubric>('rubrics').findOne({ _id: mongoRubricId });
 
     if (!rubric) {
+      await updateSessionStatus(sessionId, 'scoring_failed_db', `Rubric not found for rubricId: ${rubricId}`);
       return NextResponse.json({ error: `Rubric not found for rubricId: ${rubricId}` }, { status: 404 });
     }
 
@@ -153,66 +194,85 @@ export async function POST(request: Request) {
 
     const userPrompt = `Please evaluate the following interview transcript against the provided rubric.\n\n**Rubric: ${rubric.name}**\nRubric Definition (note 'evaluation_criteria' is an array of dimensions):\n${JSON.stringify(rubric.definition, null, 2)}\n\n**Interview Transcript:**\n${fullTranscript}\n\nProvide your evaluation ONLY in the specified JSON format, ensuring a score item for each dimension in 'evaluation_criteria'.`;
 
-    const llmModel = 'chatgpt-4o-latest';
+    const llmModel = "chatgpt-4o-latest";
 
-    console.log(`Calling OpenAI with model ${llmModel} using ${rubric.systemPrompt ? 'custom' : 'default'} system prompt.`);
-    const completion = await openai.chat.completions.create({
-      model: llmModel,
-      messages: [
-        { role: 'system', content: systemPromptToUse },
-        { role: 'user', content: userPrompt },
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0.3,
-    });
-
-    const llmResponseContent = completion.choices[0]?.message?.content;
-
-    if (!llmResponseContent) {
-      console.warn('LLM returned no content');
-      return NextResponse.json({ error: 'LLM returned no content' }, { status: 500 });
-    }
-
-    let parsedLLMResponse: LLMScoreResponse;
     try {
-      parsedLLMResponse = JSON.parse(llmResponseContent);
-    } catch (parseError) {
-      console.error('Failed to parse LLM JSON response:', parseError);
-      console.error('Raw LLM response content:', llmResponseContent);
-      return NextResponse.json({ error: 'Failed to parse LLM response as JSON. Raw response logged.', rawResponse: llmResponseContent }, { status: 500 });
+      logger.info({event: 'LLMCallAttempt', details: { sessionId, model: llmModel }});
+      const completion = await openai.chat.completions.create({
+        model: llmModel,
+        messages: [
+          { role: 'system', content: systemPromptToUse },
+          { role: 'user', content: userPrompt },
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.3,
+      });
+
+      const llmResponseContent = completion.choices[0]?.message?.content;
+
+      if (!llmResponseContent) {
+        throw new Error('LLM returned no content');
+      }
+
+      let parsedLLMResponse: LLMScoreResponse;
+      try {
+        parsedLLMResponse = JSON.parse(llmResponseContent);
+      } catch (parseError) {
+        console.error('Failed to parse LLM JSON response:', parseError);
+        console.error('Raw LLM response content:', llmResponseContent);
+        await updateSessionStatus(sessionId, 'scoring_failed_db', 'Failed to parse LLM response as JSON. Raw response logged.');
+        return NextResponse.json({ error: 'Failed to parse LLM response as JSON. Raw response logged.', rawResponse: llmResponseContent }, { status: 500 });
+      }
+      
+      // TODO: Add validation for parsedLLMResponse structure
+
+      const newScoreEntry: StoredScore = {
+        sessionId,
+        rubricId: mongoRubricId,
+        rubricName: rubric.name,
+        llmResponse: parsedLLMResponse,
+        fullTranscriptText: fullTranscript,
+        llmModelUsed: llmModel,
+        scoredAt: new Date(),
+      };
+
+      try {
+        const scoreResult = await db.collection<StoredScore>('scores').insertOne(newScoreEntry);
+        if (!scoreResult.insertedId) {
+          throw new Error('Failed to get insertedId after saving score.');
+        }
+        const createdScore = await db.collection<StoredScore>('scores').findOne({ _id: scoreResult.insertedId });
+        logger.info({ event: 'ScoreSaveSuccess', details: { sessionId, scoreId: scoreResult.insertedId } });
+        await updateSessionStatus(sessionId, 'scored_successfully');
+        return NextResponse.json({ message: 'Session scored successfully', score: createdScore }, { status: 201 });
+      } catch (dbSaveError: any) {
+        const errorMessage = dbSaveError.message || 'Failed to save score to database';
+        logger.error({ event: 'ScoreSaveError', details: { sessionId }, message: errorMessage, error: dbSaveError });
+        await updateSessionStatus(sessionId, 'scoring_failed_db', errorMessage);
+        return NextResponse.json({ error: errorMessage }, { status: 500 });
+      }
+
+    } catch (llmError: any) {
+      const errorMessage = llmError instanceof OpenAI.APIError ? llmError.message : (llmError.message || 'Unknown LLM error');
+      logger.error({ event: 'LLMCallError', details: { sessionId }, message: errorMessage, error: llmError });
+      await updateSessionStatus(sessionId, 'scoring_failed_db', errorMessage);
+      return NextResponse.json({ error: errorMessage }, { status: 500 });
     }
-    
-    // TODO: Add validation for parsedLLMResponse structure
 
-    const newScoreEntry: StoredScore = {
-      sessionId,
-      rubricId: mongoRubricId,
-      rubricName: rubric.name,
-      llmResponse: parsedLLMResponse,
-      fullTranscriptText: fullTranscript,
-      llmModelUsed: llmModel,
-      scoredAt: new Date(),
-    };
-
-    const scoreResult = await db.collection<StoredScore>('scores').insertOne(newScoreEntry);
-
-    if (!scoreResult.insertedId) {
-      return NextResponse.json({ error: 'Failed to save score to database' }, { status: 500 });
+  } catch (error: any) {
+    const errorMessage = error.message || 'Unhandled error in scoring route';
+    logger.error({event: 'ScoreSessionUnhandledError', details: { sessionId: sessionId || 'unknown' }, message: errorMessage, error: error});
+    const finalSessionId = sessionId || 'unknown_session'; // Use sessionId if available for status update
+    if (sessionId) { // Only update status if we have a sessionId
+        await updateSessionStatus(finalSessionId, 'scoring_failed_db', errorMessage);
     }
-
-    const createdScore = await db.collection<StoredScore>('scores').findOne({ _id: scoreResult.insertedId });
-
-    return NextResponse.json({ message: 'Session scored successfully', score: createdScore }, { status: 201 });
-
-  } catch (error) {
-    console.error('Error in /api/score-session:', error);
     if (error instanceof SyntaxError) {
       return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 });
     }
-    if (error instanceof OpenAI.APIError) {
-        console.error('OpenAI API Error:', error.status, error.message, error.code, error.type);
+    if (error instanceof OpenAI.APIError) { // Should be caught by inner try/catch, but as a fallback
+        console.error('[SCORE-SESSION FALLBACK] OpenAI API Error:', error.status, error.message, error.code, error.type);
         return NextResponse.json({ error: `OpenAI API Error: ${error.message}` }, { status: error.status || 500 });
     }
-    return NextResponse.json({ error: 'Failed to score session' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to score session due to an unexpected error' }, { status: 500 });
   }
 } 
