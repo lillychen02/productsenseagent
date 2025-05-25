@@ -34,12 +34,13 @@ interface SessionMetadataDbModel { // What's actually in the DB
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { sessionId: string } }
+  { params }: { params: Promise<{ sessionId: string }> }
 ) {
-  const sessionId = params.sessionId;
+  const resolvedParams = await params;
+  const sessionId = resolvedParams.sessionId;
 
   if (!sessionId) {
-    return NextResponse.json({ error: 'Session ID is required' }, { status: 400 });
+    return NextResponse.json({ error: 'Session ID is required or not found in params' }, { status: 400 });
   }
 
   try {
