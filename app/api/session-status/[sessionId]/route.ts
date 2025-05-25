@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '../../../../lib/mongodb'; // Adjust path as needed
 import { ObjectId } from 'mongodb';
-import { type SessionStatus } from '../../elevenlabs-webhook/route'; // Import SessionStatus type
+import { type SessionStatus } from '../../../../lib/types/session'; // Corrected import path
 
 // Simplified SessionMetadata for this endpoint's response
 interface SessionStatusResponse {
@@ -34,9 +34,9 @@ interface SessionMetadataDbModel { // What's actually in the DB
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { sessionId: string } }
+  context: { params: { sessionId: string } }
 ) {
-  const sessionId = params.sessionId;
+  const sessionId = context.params.sessionId;
 
   if (!sessionId) {
     return NextResponse.json({ error: 'Session ID is required' }, { status: 400 });
