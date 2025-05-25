@@ -4,12 +4,15 @@ import { connectToDatabase } from '../../../lib/mongodb';
 import { ObjectId } from 'mongodb';
 import { sendDiscordAlert } from '../../../lib/monitoringUtils';
 import { logger } from '../../../lib/logger';
-import { type SessionStatus, type SessionMetadata, type EmailedResultLogEntry } from '../../../lib/types/session'; // Import from shared types
+import { type SessionStatus, type SessionMetadata } from '../../../lib/types/session'; // Now imports shared types
+import { type ScoringJob, type ScoringJobStatus } from '../../../lib/types/jobs'; // Import job types
 
 const ELEVENLABS_WEBHOOK_SECRET = process.env.ELEVENLABS_WEBHOOK_SECRET;
 const FIVE_MINUTES_IN_SECONDS = 5 * 60;
 const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 500;
+const MAX_ATTEMPTS_FOR_JOB = 3; // For the job runner later, not for enqueueing itself now
+const MAX_SCORING_JOB_ATTEMPTS = 3; // Max attempts for the worker to process the job
 
 async function verifySignature(clonedRequest: Request): Promise<boolean> {
   if (!ELEVENLABS_WEBHOOK_SECRET) {
@@ -129,6 +132,7 @@ export async function POST(request: NextRequest) {
     logger.info({ event: 'WebhookSessionMetaFound', details: { sessionId: webhookSessionIdFromPayload, currentStatus: sessionMeta.status } });
 
     rubricIdToUse = sessionMeta.rubricId.toString();
+    const rubricNameToUse = sessionMeta.rubricName;
     const now = new Date();
 
     // After payload verification -> set status='webhook_received'
@@ -159,86 +163,69 @@ export async function POST(request: NextRequest) {
     logger.info({ event: 'WebhookDecisionCondition', details: { condition: 'appropriateEndReasons includes endReason', value: endReason && appropriateEndReasons.includes(endReason.toLowerCase()) } });
 
     if (callStatus === 'done') {
-      logger.info({ event: 'WebhookAction', message: 'Conditions MET. Attempting to enqueue scoring with retries.', details: { sessionId: webhookSessionIdFromPayload } });
+      logger.info({ event: 'WebhookScoringJobCreationAttempt', message: 'Call status is done, creating scoring job.', details: { sessionId: webhookSessionIdFromPayload }});
       
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'; 
-      const scoreSessionUrl = `${appUrl}/api/score-session`;
-      
-      attempt = 0;
-      success = false;
-      lastErrorForDb = null;
+      const newScoringJob: Omit<ScoringJob, '_id'> = { // Omit _id for insertion
+        sessionId: webhookSessionIdFromPayload,
+        rubricId: rubricIdToUse,
+        rubricName: rubricNameToUse,
+        status: 'pending', // Initial status for a new job
+        attempts: 0,
+        max_attempts: MAX_SCORING_JOB_ATTEMPTS,
+        created_at: now,
+        updated_at: now,
+        status_error: null, // Initialize as null
+      };
 
-      while (attempt < MAX_RETRIES && !success) {
-        attempt++;
-        logger.info({ event: 'WebhookAction', message: `Enqueue attempt ${attempt}/${MAX_RETRIES}`, details: { sessionId: webhookSessionIdFromPayload, url: scoreSessionUrl } });
-        try {
-          const response = await fetch(scoreSessionUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sessionId: webhookSessionIdFromPayload, rubricId: rubricIdToUse }),
-            // Consider adding a timeout to the fetch call itself if your platform supports AbortController easily
-            // signal: AbortSignal.timeout(10000) // Example: 10 second timeout for the fetch
-          });
+      let jobCreationError: string | null = null;
+      let newJobId: ObjectId | undefined = undefined;
+      let finalSessionStatusForEnqueue: SessionStatus = 'scoring_enqueued';
 
-          logger.info({ event: 'WebhookAction', message: `Internal call responded (attempt ${attempt})`, details: { sessionId: webhookSessionIdFromPayload, ok: response.ok, status: response.status } });
-
-          if (response.ok) {
-            success = true;
-            lastErrorForDb = null; // Clear any previous attempt errors
-            break; // Exit retry loop on success
-          }
-          
-          // If response not ok, prepare error for logging and potential retry
-          const errorData = await response.json().catch(() => ({ message: "Scoring API call failed with non-OK response, and failed to parse error JSON." }));
-          triggerError = errorData.message || `Scoring API error (attempt ${attempt}): ${response.status}`;
-          lastErrorForDb = triggerError; 
-          logger.warn({ event: 'WebhookEnqueueNonOkResponse', message: `Non-OK response from /api/score-session (attempt ${attempt})`, details: { sessionId: webhookSessionIdFromPayload, status: response.status }, error: triggerError });
-
-        } catch (fetchError: any) {
-          logger.warn({ event: 'WebhookEnqueueFetchError', message: `Fetch error (attempt ${attempt})`, details: { sessionId: webhookSessionIdFromPayload }, error: fetchError.message });
-          triggerError = fetchError.message || `Network error or scoring service unavailable (attempt ${attempt}).`;
-          lastErrorForDb = triggerError;
+      try {
+        const insertResult = await db.collection<ScoringJob>('scoring_jobs').insertOne(newScoringJob as ScoringJob);
+        if (!insertResult.insertedId) {
+          throw new Error('Failed to insert scoring job, no insertedId returned.');
         }
-
-        if (!success && attempt < MAX_RETRIES) {
-          const delay = INITIAL_BACKOFF_MS * Math.pow(2, attempt - 1);
-          logger.info({ event: 'WebhookEnqueueRetryDelay', message: `Waiting ${delay}ms before next retry.`, details: { sessionId: webhookSessionIdFromPayload, delay } });
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
+        newJobId = insertResult.insertedId;
+        logger.info({ event: 'WebhookScoringJobCreated', details: { sessionId: webhookSessionIdFromPayload, jobId: newJobId }});
+      } catch (error: any) {
+        logger.error({ event: 'WebhookScoringJobCreationError', message: 'Failed to create scoring job.', details: { sessionId: webhookSessionIdFromPayload }, error: error });
+        jobCreationError = error.message || "Failed to insert scoring job into database.";
+        finalSessionStatusForEnqueue = 'scoring_enqueue_failed';
       }
 
-      // Determine final status based on retry outcomes
-      const finalScoringTriggerStatus: SessionStatus = success ? 'scoring_enqueued' : 'scoring_enqueue_failed';
-      
+      // Update session_metadata based on job creation outcome
       try {
         await db.collection<SessionMetadata>('sessions_metadata').updateOne(
-            { sessionId: webhookSessionIdFromPayload }, 
-            { 
-              $set: { 
-                status: finalScoringTriggerStatus, 
-                status_updated_at: new Date(), 
-                status_error: lastErrorForDb, 
-                updatedAt: new Date() 
-              }
-            }
+          { sessionId: webhookSessionIdFromPayload },
+          { $set: { 
+              status: finalSessionStatusForEnqueue, 
+              status_updated_at: new Date(), 
+              status_error: jobCreationError, 
+              queue_job_id: newJobId?.toString() || null, // Store the new job ID if created
+              updatedAt: new Date() 
+            }}
         );
-        logger.info({ event: 'WebhookEnqueueFinalStatusUpdate', details: { sessionId: webhookSessionIdFromPayload, status: finalScoringTriggerStatus, error: lastErrorForDb } });
-        
-        if (finalScoringTriggerStatus === 'scoring_enqueue_failed') {
+        logger.info({ event: 'WebhookSessionStatusAfterJobAttempt', details: { sessionId: webhookSessionIdFromPayload, status: finalSessionStatusForEnqueue, jobId: newJobId?.toString() }});
+        if (finalSessionStatusForEnqueue === 'scoring_enqueue_failed') {
           sendDiscordAlert(
-            "Scoring Enqueue Failed", 
-            `Failed to enqueue scoring task for session ID: ${webhookSessionIdFromPayload} after ${MAX_RETRIES} retries.`, 
-            [{ name: "Session ID", value: webhookSessionIdFromPayload || 'N/A', inline: true }, { name: "Error", value: lastErrorForDb || 'N/A', inline: false }]
+            "Scoring Job Creation Failed",
+            `Failed to create scoring job for session ID: ${webhookSessionIdFromPayload}.`, 
+            [
+              { name: "Session ID", value: webhookSessionIdFromPayload!, inline: true },
+              { name: "Error", value: jobCreationError || 'Unknown error', inline: false }
+            ]
           );
         }
       } catch (dbUpdateError: any) {
-        logger.error({ event: 'WebhookDBError', message: 'Failed to update session metadata after enqueue attempt', details: { sessionId: webhookSessionIdFromPayload, status: finalScoringTriggerStatus }, error: dbUpdateError.message });
+        logger.error({ event: 'WebhookDBError', message: 'Failed to update session_metadata after scoring job attempt.', details: { sessionId: webhookSessionIdFromPayload }, error: dbUpdateError });
       }
       
-      if (!success) {
-        return NextResponse.json({ message: 'Webhook received, but failed to enqueue scoring task after multiple retries.', internal_error: triggerError }, { status: 200 });
+      // Respond to ElevenLabs
+      if (jobCreationError) {
+        return NextResponse.json({ message: 'Webhook received, but failed to create scoring job.', internal_error: jobCreationError }, { status: 200 });
       }
-      return NextResponse.json({ message: `Webhook received, scoring process initiated successfully after ${attempt} attempt(s).` }, { status: 200 });
+      return NextResponse.json({ message: 'Webhook received, scoring job created successfully.' }, { status: 200 });
 
     } else {
       logger.info({ event: 'WebhookAction', message: 'Conditions NOT MET for session. Scoring not triggered.', details: { sessionId: webhookSessionIdFromPayload, callStatus } });
@@ -249,7 +236,7 @@ export async function POST(request: NextRequest) {
         );
         logger.info({ event: 'WebhookStatusUpdated', details: { sessionId: webhookSessionIdFromPayload, newStatus: 'webhook_received_not_scored' } });
       } catch (dbUpdateError: any) {
-        logger.error({ event: 'WebhookDBError', message: 'Failed to update session to webhook_received_not_scored', details: { sessionId: webhookSessionIdFromPayload }, error: dbUpdateError.message });
+        logger.error({ event: 'WebhookDBError', message: 'Failed to update session to webhook_received_not_scored', details: { sessionId: webhookSessionIdFromPayload }, error: dbUpdateError });
       }
       return NextResponse.json({ message: 'Webhook received, scoring not applicable for this event.' }, { status: 200 });
     }
