@@ -6,6 +6,7 @@ import { sendDiscordAlert } from '../../../lib/monitoringUtils';
 import { logger } from '../../../lib/logger';
 import { type SessionStatus, type SessionMetadata } from '../../../lib/types/session'; // Now imports shared types
 import { type ScoringJob, type ScoringJobStatus } from '../../../lib/types/jobs'; // Import job types
+import { processOneScoringJob } from '../../../lib/jobProcessor'; // Import the job processor
 
 const ELEVENLABS_WEBHOOK_SECRET = process.env.ELEVENLABS_WEBHOOK_SECRET;
 const FIVE_MINUTES_IN_SECONDS = 5 * 60;
@@ -78,6 +79,8 @@ export async function POST(request: NextRequest) {
   let callStatus: string | undefined;
   let endReason: string | undefined;
   let sessionMeta: SessionMetadata | null = null; // Define sessionMeta here
+  let rubricNameToUse: string | undefined;
+  let now = new Date();
 
   try {
     const requestCloneForVerification = request.clone();
@@ -132,8 +135,8 @@ export async function POST(request: NextRequest) {
     logger.info({ event: 'WebhookSessionMetaFound', details: { sessionId: webhookSessionIdFromPayload, currentStatus: sessionMeta.status } });
 
     rubricIdToUse = sessionMeta.rubricId.toString();
-    const rubricNameToUse = sessionMeta.rubricName;
-    const now = new Date();
+    rubricNameToUse = sessionMeta.rubricName;
+    now = new Date();
 
     // After payload verification -> set status='webhook_received'
     try {
@@ -169,7 +172,7 @@ export async function POST(request: NextRequest) {
         details: { sessionId: webhookSessionIdFromPayload, rubricId: rubricIdToUse, rubricName: rubricNameToUse }
       });
       
-      const newScoringJob: Omit<ScoringJob, '_id'> = {
+      const newScoringJobData: Omit<ScoringJob, '_id'> = {
         sessionId: webhookSessionIdFromPayload!,
         rubricId: rubricIdToUse,
         rubricName: rubricNameToUse,
@@ -185,10 +188,10 @@ export async function POST(request: NextRequest) {
       let newJobId: ObjectId | undefined = undefined;
       let finalSessionStatusForEnqueue: SessionStatus = 'scoring_enqueued';
 
-      logger.info({ event: 'PreScoringJobInsert', details: { sessionId: webhookSessionIdFromPayload, jobData: newScoringJob } });
+      logger.info({ event: 'PreScoringJobInsert', details: { sessionId: webhookSessionIdFromPayload, jobData: newScoringJobData } });
 
       try {
-        const insertResult = await db.collection<ScoringJob>('scoring_jobs').insertOne(newScoringJob as ScoringJob);
+        const insertResult = await db.collection<ScoringJob>('scoring_jobs').insertOne(newScoringJobData as ScoringJob);
         logger.info({ 
           event: 'ScoringJobInsertAttempted', 
           details: { 
@@ -203,7 +206,7 @@ export async function POST(request: NextRequest) {
           throw new Error('Failed to insert scoring job, no insertedId returned by MongoDB.');
         }
         newJobId = insertResult.insertedId;
-        logger.info({ event: 'WebhookScoringJobCreatedSuccessfully', details: { sessionId: webhookSessionIdFromPayload, jobId: newJobId }});
+        logger.info({ event: 'WebhookScoringJobCreated', details: { sessionId: webhookSessionIdFromPayload, jobId: newJobId }});
       } catch (error: any) {
         logger.error({ 
           event: 'WebhookScoringJobCreationErrorCatch', 
@@ -233,7 +236,7 @@ export async function POST(request: NextRequest) {
               status: finalSessionStatusForEnqueue, 
               status_updated_at: new Date(), 
               status_error: jobCreationError, 
-              queue_job_id: newJobId?.toString() || null, // Store the new job ID if created
+              queue_job_id: newJobId?.toString() || null, 
               updatedAt: new Date() 
             }}
         );
@@ -252,7 +255,21 @@ export async function POST(request: NextRequest) {
         logger.error({ event: 'WebhookDBError', message: 'Failed to update session_metadata after scoring job attempt.', details: { sessionId: webhookSessionIdFromPayload }, error: dbUpdateError });
       }
       
-      // Respond to ElevenLabs
+      // Conditionally process the job immediately in development if enqueue was successful
+      if (finalSessionStatusForEnqueue === 'scoring_enqueued' && process.env.NODE_ENV === 'development') {
+        logger.info({ event: 'WebhookDevAutoProcessing', message: 'Development mode: Auto-processing enqueued scoring job.', details: { sessionId: webhookSessionIdFromPayload, jobId: newJobId?.toString() }});
+        try {
+          // Don't necessarily await this if the webhook needs to respond quickly,
+          // but for local dev, awaiting gives more synchronous test feedback.
+          // If this call is slow, it could make the webhook timeout to ElevenLabs.
+          await processOneScoringJob(); 
+          logger.info({ event: 'WebhookDevAutoProcessingComplete', details: { sessionId: webhookSessionIdFromPayload }});
+        } catch (processingError: any) {
+          logger.error({ event: 'WebhookDevAutoProcessingError', message: 'Error during development auto-processing of job.', details: { sessionId: webhookSessionIdFromPayload, jobId: newJobId?.toString() }, error: processingError });
+          // The job processor itself should handle updating job/session status for this error.
+        }
+      }
+
       if (jobCreationError) {
         return NextResponse.json({ message: 'Webhook received, but failed to create scoring job.', internal_error: jobCreationError }, { status: 200 });
       }

@@ -6,6 +6,7 @@ import { type ScoringJob, type ScoringJobStatus } from '../../../lib/types/jobs'
 import { type SessionStatus, type SessionMetadata } from '../../../lib/types/session';
 import { executeScoring, LLMProcessingError, DatabaseError, StoredScore } from '../../../lib/scoringService';
 import { sendDiscordAlert } from '../../../lib/monitoringUtils';
+import { processOneScoringJob } from '../../../lib/jobProcessor'; // Import the core processing logic
 
 const MAX_JOB_PROCESSING_ATTEMPTS = 3; // Default max attempts for a job if not set on job itself
 const PROCESSING_TIMEOUT_MS = 55000; // Time limit for processing a single job (e.g., 55s for Vercel Pro 60s limit)
@@ -37,88 +38,52 @@ async function updateSessionMetadataStatus(sessionId: string, status: SessionSta
 
 // This endpoint will be triggered by a Vercel Cron Job
 export async function GET(request: NextRequest) {
-  // 1. Check Authorization header
+  // 1. Authorize Cron Job Request
   if (!CRON_SECRET_EXPECTED) {
-    logger.error({ event: 'CronSecretMissingConfig', message: 'CRON_SECRET is not configured on the server for /api/process-scoring-jobs.' });
-    // Do not return a detailed error to the client for security, just a generic server error.
-    return new NextResponse('Configuration error', { status: 500 }); 
+    logger.error({ 
+      event: 'CronJobAuthError', 
+      message: 'CRON_SECRET is not configured on the server for /api/process-scoring-jobs.' 
+    });
+    return new NextResponse('Configuration error: Cron secret not set on server.', { status: 500 }); 
   }
-
   const authHeader = request.headers.get('authorization');
   if (authHeader !== `Bearer ${CRON_SECRET_EXPECTED}`) {
     logger.warn({ 
-      event: 'CronUnauthorizedAccess', 
-      message: 'Unauthorized attempt to access cron job endpoint /api/process-scoring-jobs.',
+      event: 'CronJobUnauthorized', 
+      message: 'Unauthorized attempt to access /api/process-scoring-jobs.',
       details: { receivedHeader: authHeader || "Not provided" }
     });
     return new NextResponse('Unauthorized', { status: 401 });
   }
 
-  logger.info({ event: 'ProcessScoringJobsStarted', details: { authorized: true } });
-  const { db } = await connectToDatabase();
-  let jobProcessed = false;
-
-  const job = await db.collection<ScoringJob>('scoring_jobs').findOneAndUpdate(
-    {
-      status: 'pending',
-      attempts: { $lt: MAX_JOB_PROCESSING_ATTEMPTS }
-    },
-    {
-      $set: { status: 'processing', updatedAt: new Date() },
-      $inc: { attempts: 1 }
-    },
-    {
-      sort: { created_at: 1 },
-      returnDocument: 'after'
-    }
-  );
-
-  if (!job) {
-    logger.info({ event: 'ProcessScoringJobsNoPendingJobs', message: 'No pending scoring jobs to process.' });
-    return NextResponse.json({ message: 'No jobs to process' }, { status: 200 });
-  }
-
-  logger.info({ event: 'ProcessingScoringJob', details: { jobId: job._id, sessionId: job.sessionId, attempt: job.attempts } });
+  logger.info({ event: 'CronJobProcessScoringInvoked', details: { authorized: true } });
 
   try {
-    const scoringPromise = executeScoring(job.sessionId, job.rubricId);
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error(`Scoring timed out after ${PROCESSING_TIMEOUT_MS / 1000}s`)), PROCESSING_TIMEOUT_MS)
-    );
+    const result = await processOneScoringJob(); // Call the centralized job processing logic
     
-    await Promise.race([scoringPromise, timeoutPromise]);
-
-    await updateSessionMetadataStatus(job.sessionId, 'scored_successfully');
-    await db.collection<ScoringJob>('scoring_jobs').updateOne(
-      { _id: job._id },
-      { $set: { status: 'completed', processed_at: new Date(), updatedAt: new Date(), status_error: null } }
-    );
-    logger.info({ event: 'ScoringJobCompleted', details: { jobId: job._id, sessionId: job.sessionId } });
-    jobProcessed = true;
-
-  } catch (err: any) {
-    logger.error({ event: 'ScoringJobFailed', details: { jobId: job._id, sessionId: job.sessionId, attempt: job.attempts }, message: err.message, error: err });
-    let jobErrorStatus: ScoringJobStatus = 'failed';
-    let sessionErrorStatus: SessionStatus = 'scoring_failed_db';
-
-    if (err instanceof LLMProcessingError) {
-      sessionErrorStatus = 'scoring_failed_llm';
-    } else if (err.message && err.message.includes('Scoring timed out')){
-      sessionErrorStatus = 'scoring_failed_llm';
+    if (result.status === 'no_jobs') {
+      logger.info({event: 'CronJobNoPendingJobs', message: result.message});
+      return NextResponse.json({ message: result.message }, { status: 200 });
+    } else if (result.status === 'completed') {
+      logger.info({event: 'CronJobProcessedSuccessfully', details: { jobId: result.jobId, sessionId: result.sessionId, message: result.message }});
+      return NextResponse.json({ message: result.message, jobId: result.jobId, sessionId: result.sessionId }, { status: 200 });
+    } else if (result.status === 'failed') {
+      logger.warn({event: 'CronJobProcessedWithFailure', details: { jobId: result.jobId, sessionId: result.sessionId, message: result.message }});
+      // The error details would have been logged and alerted from within processOneScoringJob/executeScoring
+      return NextResponse.json({ message: result.message, jobId: result.jobId, sessionId: result.sessionId }, { status: 200 }); // Still 200, cron did its job of attempting
+    } else {
+      // Should not happen if processOneScoringJob returns defined statuses
+      logger.error({event: 'CronJobUnknownResultStatus', details: { result } });
+      return NextResponse.json({ message: "Job processing resulted in an unknown state.", result }, { status: 500 });
     }
 
-    await updateSessionMetadataStatus(job.sessionId, sessionErrorStatus, err.message || 'Unknown scoring error');
-    await db.collection<ScoringJob>('scoring_jobs').updateOne(
-      { _id: job._id },
-      { $set: { 
-          status: jobErrorStatus,
-          status_error: err.message || 'Unknown error', 
-          processed_at: new Date(),
-          updatedAt: new Date() 
-        }}
-    );
-    jobProcessed = true;
+  } catch (error: any) {
+    logger.error({ 
+      event: 'CronJobProcessScoringCriticalError', 
+      message: 'Critical unhandled error in /api/process-scoring-jobs.', 
+      error: { message: error.message, stack: error.stack }
+    });
+    // This is an error in the worker API itself, not necessarily a job processing failure
+    return NextResponse.json({ error: 'Failed to process scoring jobs due to an unexpected server error.' }, { status: 500 });
   }
-
-  return NextResponse.json({ message: jobProcessed ? `Processed job ${job._id} for session ${job.sessionId}` : 'Job processing initiated, check logs.' }, { status: 200 });
 } 

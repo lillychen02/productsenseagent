@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '../../../lib/mongodb';
 import { ObjectId } from 'mongodb';
 import OpenAI from 'openai';
@@ -15,21 +15,21 @@ async function updateSessionStatus(sessionId: string, status: SessionStatus, err
       { sessionId }, 
       { $set: { status: status, status_updated_at: now, status_error: error === undefined ? null : error, updatedAt: now }}
     );
-    logger.info({ event: 'SessionStatusUpdated', details: { sessionId, status, error: error || undefined } });
+    logger.info({ event: 'DirectScoreAPISessionStatusUpdated', details: { sessionId, status, error: error || undefined } });
     if (status === 'scoring_failed_llm' || status === 'scoring_failed_db') {
       sendDiscordAlert(
-        `Scoring Failed: ${status.replace('scoring_failed_', '').toUpperCase()}`,
-        `Scoring process failed for session ID: ${sessionId}.`, 
+        `Scoring Failed (Direct API): ${status.replace('scoring_failed_', '').toUpperCase()}`,
+        `Scoring process failed for session ID: ${sessionId} via direct API call.`, 
         [{ name: "Session ID", value: sessionId, inline: true }, { name: "Status", value: status, inline: true }, { name: "Error", value: error || 'N/A', inline: false }]
       );
       logger.info({event: 'DiscordAlertSentForScoringFailure', details: { sessionId, status, error }});
     }
   } catch (dbError: any) {
-    logger.error({ event: 'UpdateSessionStatusError', details: { sessionId, status, attemptedError: error }, error: { message: dbError.message, stack: dbError.stack } });
+    logger.error({ event: 'DirectScoreAPIUpdateSessionStatusError', details: { sessionId, status, attemptedError: error }, error: { message: dbError.message } });
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   let sessionId: string | undefined;
   let rubricId: string | undefined;
 
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     rubricId = body.rubricId as string;
 
     if (!process.env.OPENAI_API_KEY) {
-      logger.error({event: 'OpenAIKeyMissing', message: 'OPENAI_API_KEY is not configured.'});
+      logger.error({event: 'OpenAIKeyMissing', message: 'OPENAI_API_KEY is not configured for /api/score-session.'});
       return NextResponse.json({ error: 'Server configuration error: Missing OpenAI API key.' }, { status: 500 });
     }
     if (!sessionId || !rubricId) {
@@ -47,34 +47,34 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing sessionId or rubricId' }, { status: 400 });
     }
     
-    logger.info({event: 'ScoreSessionRequestReceived', details: { sessionId, rubricId }});
+    logger.info({event: 'ScoreSessionDirectAPICallReceived', details: { sessionId, rubricId }});
     await updateSessionStatus(sessionId, 'scoring_in_progress');
 
     const createdScore: StoredScore = await executeScoring(sessionId, rubricId);
     
     await updateSessionStatus(sessionId, 'scored_successfully');
-    logger.info({ event: 'ScoreSessionSuccess', details: { sessionId, scoreId: createdScore._id } });
-    return NextResponse.json({ message: 'Session scored successfully', score: createdScore }, { status: 201 });
+    logger.info({ event: 'ScoreSessionDirectAPISuccess', details: { sessionId, scoreId: createdScore._id } });
+    return NextResponse.json({ message: 'Session scored successfully (direct API)', score: createdScore }, { status: 201 });
 
   } catch (error: any) {
     const finalSessionId = sessionId || 'unknown_session';
     let failureStatus: SessionStatus = 'scoring_failed_db';
-    let errorMessage = 'Failed to score session due to an unexpected error';
+    let errorMessage = 'Failed to score session due to an unexpected error (direct API)';
 
     if (error instanceof LLMProcessingError) {
       failureStatus = 'scoring_failed_llm';
-      errorMessage = error.message || 'LLM processing failed';
-      logger.error({ event: 'ScoreSessionLLMError', details: { sessionId: finalSessionId }, message: errorMessage, error });
+      errorMessage = error.message || 'LLM processing failed (direct API)';
+      logger.error({ event: 'ScoreSessionDirectAPILLMError', details: { sessionId: finalSessionId }, message: errorMessage, error });
     } else if (error instanceof DatabaseError) {
       failureStatus = 'scoring_failed_db';
-      errorMessage = error.message || 'Database operation failed during scoring';
-      logger.error({ event: 'ScoreSessionDBError', details: { sessionId: finalSessionId }, message: errorMessage, error });
+      errorMessage = error.message || 'Database operation failed during scoring (direct API)';
+      logger.error({ event: 'ScoreSessionDirectAPIDBError', details: { sessionId: finalSessionId }, message: errorMessage, error });
     } else if (error instanceof SyntaxError) {
-        errorMessage = 'Invalid JSON in request body';
-        logger.warn({ event: 'ScoreSessionInputError', message: errorMessage, error });
+        errorMessage = 'Invalid JSON in request body (direct API)';
+        logger.warn({ event: 'ScoreSessionDirectAPIInputError', message: errorMessage, error });
         return NextResponse.json({ error: errorMessage }, { status: 400 });
     } else {
-      logger.error({event: 'ScoreSessionUnhandledError', details: { sessionId: finalSessionId }, message: error.message || errorMessage, error: error});
+      logger.error({event: 'ScoreSessionDirectAPIUnhandledError', details: { sessionId: finalSessionId }, message: error.message || errorMessage, error: error});
     }
 
     if (sessionId) {
