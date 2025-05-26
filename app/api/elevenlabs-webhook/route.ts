@@ -163,36 +163,67 @@ export async function POST(request: NextRequest) {
     logger.info({ event: 'WebhookDecisionCondition', details: { condition: 'appropriateEndReasons includes endReason', value: endReason && appropriateEndReasons.includes(endReason.toLowerCase()) } });
 
     if (callStatus === 'done') {
-      logger.info({ event: 'WebhookScoringJobCreationAttempt', message: 'Call status is done, creating scoring job.', details: { sessionId: webhookSessionIdFromPayload }});
+      logger.info({ 
+        event: 'WebhookAttemptingScoringJobCreation', 
+        message: 'Call status is done. Preparing to create scoring job.', 
+        details: { sessionId: webhookSessionIdFromPayload, rubricId: rubricIdToUse, rubricName: rubricNameToUse }
+      });
       
-      const newScoringJob: Omit<ScoringJob, '_id'> = { // Omit _id for insertion
-        sessionId: webhookSessionIdFromPayload,
+      const newScoringJob: Omit<ScoringJob, '_id'> = {
+        sessionId: webhookSessionIdFromPayload!,
         rubricId: rubricIdToUse,
         rubricName: rubricNameToUse,
-        status: 'pending', // Initial status for a new job
+        status: 'pending',
         attempts: 0,
         max_attempts: MAX_SCORING_JOB_ATTEMPTS,
         created_at: now,
         updated_at: now,
-        status_error: null, // Initialize as null
+        status_error: null,
       };
 
       let jobCreationError: string | null = null;
       let newJobId: ObjectId | undefined = undefined;
       let finalSessionStatusForEnqueue: SessionStatus = 'scoring_enqueued';
 
+      logger.info({ event: 'PreScoringJobInsert', details: { sessionId: webhookSessionIdFromPayload, jobData: newScoringJob } });
+
       try {
         const insertResult = await db.collection<ScoringJob>('scoring_jobs').insertOne(newScoringJob as ScoringJob);
+        logger.info({ 
+          event: 'ScoringJobInsertAttempted', 
+          details: { 
+              sessionId: webhookSessionIdFromPayload, 
+              acknowledged: insertResult.acknowledged, 
+              insertedId: insertResult.insertedId 
+          }
+        });
+
         if (!insertResult.insertedId) {
-          throw new Error('Failed to insert scoring job, no insertedId returned.');
+          logger.warn({ event: 'ScoringJobInsertNoId', details: { sessionId: webhookSessionIdFromPayload, acknowledged: insertResult.acknowledged }, message: 'insertOne into scoring_jobs acknowledged but returned no insertedId.' });
+          throw new Error('Failed to insert scoring job, no insertedId returned by MongoDB.');
         }
         newJobId = insertResult.insertedId;
-        logger.info({ event: 'WebhookScoringJobCreated', details: { sessionId: webhookSessionIdFromPayload, jobId: newJobId }});
+        logger.info({ event: 'WebhookScoringJobCreatedSuccessfully', details: { sessionId: webhookSessionIdFromPayload, jobId: newJobId }});
       } catch (error: any) {
-        logger.error({ event: 'WebhookScoringJobCreationError', message: 'Failed to create scoring job.', details: { sessionId: webhookSessionIdFromPayload }, error: error });
+        logger.error({ 
+          event: 'WebhookScoringJobCreationErrorCatch', 
+          message: 'Error caught during scoring_jobs.insertOne.', 
+          details: { sessionId: webhookSessionIdFromPayload }, 
+          error: { message: error.message, stack: error.stack, name: error.name } 
+        });
         jobCreationError = error.message || "Failed to insert scoring job into database.";
         finalSessionStatusForEnqueue = 'scoring_enqueue_failed';
       }
+
+      logger.info({ 
+        event: 'PreSessionMetaUpdateAfterJobAttempt', 
+        details: { 
+          sessionId: webhookSessionIdFromPayload, 
+          finalSessionStatusForEnqueue, 
+          jobCreationError, 
+          newJobId: newJobId?.toString() 
+        }
+      });
 
       // Update session_metadata based on job creation outcome
       try {
