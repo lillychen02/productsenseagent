@@ -169,7 +169,7 @@ export function Conversation({ onInterviewActiveChange }: ConversationProps) {
     } else {
       logClient('ElevenLabs SDK: onMessage - Received message without standard content or unknown type.', message);
     }
-  }, [saveTranscript]);
+  }, [saveTranscript, onInterviewActiveChange]);
 
   const onError = useCallback((error: any) => {
     logClient('ElevenLabs SDK: onError - An error occurred.', error);

@@ -1,6 +1,6 @@
 'use client'; // Make this a Client Component
 
-import { Conversation, ConversationProps } from './components/conversation'
+import { Conversation } from './components/conversation'
 import { motion } from 'framer-motion'
 import { useState } from 'react'
 
@@ -43,7 +43,6 @@ export default function Home() {
         <div id="interview-section" className="w-full">
           <Conversation 
             onInterviewActiveChange={setIsInterviewActive} 
-            onScoringStateChange={setIsCurrentlyScoring}
           />
         </div>
       </div>
