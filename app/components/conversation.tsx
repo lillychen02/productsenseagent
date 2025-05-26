@@ -4,6 +4,7 @@ import { useConversation } from '@11labs/react';
 import { useCallback, useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
+import { logger } from '../../lib/logger'; // Corrected import path
 
 // Helper for timestamped logs
 const logClient = (message: string, ...args: any[]) => {
@@ -27,10 +28,9 @@ const PhoneDisabledIcon = ({ className = "w-6 h-6", fill = "currentColor" }: { c
 
 export interface ConversationProps {
   onInterviewActiveChange?: (isActive: boolean) => void;
-  onScoringStateChange?: (isScoring: boolean) => void;
 }
 
-export function Conversation({ onInterviewActiveChange, onScoringStateChange }: ConversationProps) {
+export function Conversation({ onInterviewActiveChange }: ConversationProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isEndingSession, setIsEndingSession] = useState<boolean>(false);
@@ -137,14 +137,39 @@ export function Conversation({ onInterviewActiveChange, onScoringStateChange }: 
     logClient('ElevenLabs SDK: onConnect - Voice agent connected.');
     setIsTimerRunning(true);
     if (onInterviewActiveChange) onInterviewActiveChange(true);
-    if (onScoringStateChange) onScoringStateChange(false);
-  }, [onInterviewActiveChange, onScoringStateChange]);
+  }, [onInterviewActiveChange]);
 
   const onDisconnect = useCallback((reason: any) => {
     logClient('ElevenLabs SDK: onDisconnect - Voice agent disconnected.', reason || 'No specific reason provided by SDK.');
     setIsTimerRunning(false);
     if (onInterviewActiveChange) onInterviewActiveChange(false);
   }, [onInterviewActiveChange]);
+
+  const onMessage = useCallback((message: any) => {
+    logClient('ElevenLabs SDK: onMessage - Received message.', message);
+    const currentSessionIdFromRef = sessionIdRef.current;
+    if ((message as any).type === "interruption") {
+      const interruptionEvent = message as any;
+      const reason = interruptionEvent.interruption_event?.reason || "Unknown interruption";
+      logClient(`ElevenLabs SDK: Interruption occurred - Reason: ${reason}, SessionId: ${currentSessionIdFromRef}`);
+      setIsTimerRunning(false);
+      alert(`Session interrupted: ${reason}`);
+      if (onInterviewActiveChange) onInterviewActiveChange(false);
+      return;
+    }
+    if (message && message.message && typeof message.message === 'string') {
+      if (!currentSessionIdFromRef) {
+          logClient('ElevenLabs SDK: onMessage - sessionId (from ref) is not set yet. Transcript for message NOT SAVED.', message.message);
+          return;
+      }
+      const role = message.source === 'ai' ? 'interviewer' : 'candidate';
+      logClient(`ElevenLabs SDK: onMessage - Saving transcript for role: ${role}`);
+      saveTranscript(role, message.message);
+      setTranscripts(prev => [...prev, {role, content: message.message}]);
+    } else {
+      logClient('ElevenLabs SDK: onMessage - Received message without standard content or unknown type.', message);
+    }
+  }, [saveTranscript]);
 
   const onError = useCallback((error: any) => {
     logClient('ElevenLabs SDK: onError - An error occurred.', error);
@@ -156,31 +181,7 @@ export function Conversation({ onInterviewActiveChange, onScoringStateChange }: 
   const conversation = useConversation({
     onConnect,
     onDisconnect,
-    onMessage: (message) => {
-      logClient('ElevenLabs SDK: onMessage - Received message.', message);
-      const currentSessionIdFromRef = sessionIdRef.current;
-      if ((message as any).type === "interruption") {
-        const interruptionEvent = message as any;
-        const reason = interruptionEvent.interruption_event?.reason || "Unknown interruption";
-        logClient(`ElevenLabs SDK: Interruption occurred - Reason: ${reason}, SessionId: ${currentSessionIdFromRef}`);
-        setIsTimerRunning(false);
-        alert(`Session interrupted: ${reason}`);
-        if (onInterviewActiveChange) onInterviewActiveChange(false);
-        return;
-      }
-      if (message && message.message && typeof message.message === 'string') {
-        if (!currentSessionIdFromRef) {
-            logClient('ElevenLabs SDK: onMessage - sessionId (from ref) is not set yet. Transcript for message NOT SAVED.', message.message);
-            return;
-        }
-        const role = message.source === 'ai' ? 'interviewer' : 'candidate';
-        logClient(`ElevenLabs SDK: onMessage - Saving transcript for role: ${role}`);
-        saveTranscript(role, message.message);
-        setTranscripts(prev => [...prev, {role, content: message.message}]);
-      } else {
-        logClient('ElevenLabs SDK: onMessage - Received message without standard content or unknown type.', message);
-      }
-    },
+    onMessage,
     onError,
   });
 
@@ -273,20 +274,22 @@ export function Conversation({ onInterviewActiveChange, onScoringStateChange }: 
     logClient('stopConversation: Initiated.');
     const currentSessionId = sessionIdRef.current;
     if (!currentSessionId) {
-        console.warn("Attempted to stop conversation but no active session ID (from ref).");
+        logger.warn({ 
+            event: 'StopConversationNoSessionId', 
+            message: "Attempted to stop conversation but no active session ID (from ref)." 
+        });
         return;
     }
-    console.log('User ending conversation session:', currentSessionId);
-    
+    logger.info({ event: 'UserEndingConversation', details: { sessionId: currentSessionId } });
     setIsEndingSession(true);
     if (onInterviewActiveChange) onInterviewActiveChange(false);
     setIsTimerRunning(false);
     
     try {
-      await conversation.endSession();
+      await conversation.endSession(); 
       logClient('ElevenLabs Conversation session ended by user.');
-    } catch (error) {
-      console.error('Error ending conversation:', error);
+    } catch (error: any) {
+      logger.error({ event: 'ElevenLabsEndSessionError', details: { sessionId: currentSessionId }, error: error });
     } finally {
       router.push(`/processing/${currentSessionId}`);
     }
