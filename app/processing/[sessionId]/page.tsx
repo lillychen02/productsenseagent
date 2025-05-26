@@ -50,11 +50,8 @@ export default function ProcessingPage() {
   const router = useRouter();
   const params = useParams();
   const sessionId = params.sessionId as string;
-
   const [currentStatus, setCurrentStatus] = useState<SessionStatus | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  
-  // Use a ref for attempts to avoid re-triggering useEffect unnecessarily
   const pollingAttemptsRef = useRef(0);
   const intervalIdRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -103,10 +100,15 @@ export default function ProcessingPage() {
     // Perform initial fetch immediately
     fetchStatusAndDecide();
 
-    // Then set up the interval if not already stopped by initial fetch
-    // Check if polling should continue before setting interval
+    // Set up the interval only if not already stopped by initial fetch AND no error AND not yet successful
     if (pollingAttemptsRef.current < MAX_POLLING_ATTEMPTS && !errorMessage && currentStatus !== 'scored_successfully') {
         intervalIdRef.current = setInterval(fetchStatusAndDecide, POLLING_INTERVAL);
+    } else {
+        // If conditions not met, ensure any existing interval is cleared
+        if (intervalIdRef.current) {
+            clearInterval(intervalIdRef.current);
+            intervalIdRef.current = null;
+        }
     }
 
     return () => {
@@ -115,9 +117,8 @@ export default function ProcessingPage() {
         logger.info({ event: 'ProcessingPageUnmounted', details: { sessionId, message: 'Polling stopped on unmount.' }});
       }
     };
-  // Rerun effect only if sessionId or router changes. Not on pollingAttempts or currentStatus directly.
-  // currentStatus is checked inside fetchStatusAndDecide if interval should continue or be cleared.
-  }, [sessionId, router]); 
+  // Added currentStatus and errorMessage to dependency array
+  }, [sessionId, router, currentStatus, errorMessage]); 
 
   const friendlyStatusMessage = getFriendlyStatusMessage(currentStatus);
 
@@ -142,10 +143,10 @@ export default function ProcessingPage() {
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-4 text-center">
       <div className="p-10 bg-transparent rounded-lg max-w-2xl w-full">
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-3">
-          We're preparing your feedback...
+          We&apos;re preparing your feedback...
         </h1>
         <p className="text-gray-600 text-base sm:text-lg leading-relaxed mb-6">
-          This takes ~30–60 seconds. You'll be redirected as soon as your results are ready.
+          This takes ~30–60 seconds. You&apos;ll be redirected as soon as your results are ready.
         </p>
         <div className="mb-4"> 
           <svg className="animate-spin h-12 w-12 text-indigo-600 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">

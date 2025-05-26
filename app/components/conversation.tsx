@@ -133,18 +133,29 @@ export function Conversation({ onInterviewActiveChange, onScoringStateChange }: 
     }
   }, []);
 
+  const onConnect = useCallback(() => {
+    logClient('ElevenLabs SDK: onConnect - Voice agent connected.');
+    setIsTimerRunning(true);
+    if (onInterviewActiveChange) onInterviewActiveChange(true);
+    if (onScoringStateChange) onScoringStateChange(false);
+  }, [onInterviewActiveChange, onScoringStateChange]);
+
+  const onDisconnect = useCallback((reason: any) => {
+    logClient('ElevenLabs SDK: onDisconnect - Voice agent disconnected.', reason || 'No specific reason provided by SDK.');
+    setIsTimerRunning(false);
+    if (onInterviewActiveChange) onInterviewActiveChange(false);
+  }, [onInterviewActiveChange]);
+
+  const onError = useCallback((error: any) => {
+    logClient('ElevenLabs SDK: onError - An error occurred.', error);
+    setIsTimerRunning(false);
+    if (onInterviewActiveChange) onInterviewActiveChange(false);
+    alert(`An SDK error occurred: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }, [onInterviewActiveChange]);
+
   const conversation = useConversation({
-    onConnect: () => {
-      logClient('ElevenLabs SDK: onConnect - Voice agent connected.');
-      setIsTimerRunning(true);
-      if (onInterviewActiveChange) onInterviewActiveChange(true);
-      if (onScoringStateChange) onScoringStateChange(false);
-    },
-    onDisconnect: (reason: any) => {
-      logClient('ElevenLabs SDK: onDisconnect - Voice agent disconnected.', reason || 'No specific reason provided by SDK.');
-      setIsTimerRunning(false);
-      if (onInterviewActiveChange) onInterviewActiveChange(false);
-    },
+    onConnect,
+    onDisconnect,
     onMessage: (message) => {
       logClient('ElevenLabs SDK: onMessage - Received message.', message);
       const currentSessionIdFromRef = sessionIdRef.current;
@@ -170,12 +181,7 @@ export function Conversation({ onInterviewActiveChange, onScoringStateChange }: 
         logClient('ElevenLabs SDK: onMessage - Received message without standard content or unknown type.', message);
       }
     },
-    onError: (error: any) => {
-      logClient('ElevenLabs SDK: onError - An error occurred.', error);
-      setIsTimerRunning(false);
-      if (onInterviewActiveChange) onInterviewActiveChange(false);
-      alert(`An SDK error occurred: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    },
+    onError,
   });
 
   const getSignedUrl = async (): Promise<string> => {
@@ -261,7 +267,7 @@ export function Conversation({ onInterviewActiveChange, onScoringStateChange }: 
     } finally {
       setIsLoading(false);
     }
-  }, [conversation, defaultRubricId, defaultRubricName, isRubricLoading, onInterviewActiveChange, onScoringStateChange]);
+  }, [conversation, defaultRubricId, defaultRubricName, isRubricLoading]);
 
   const stopConversation = useCallback(async () => {
     logClient('stopConversation: Initiated.');
