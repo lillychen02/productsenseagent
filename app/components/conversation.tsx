@@ -28,9 +28,11 @@ const PhoneDisabledIcon = ({ className = "w-6 h-6", fill = "currentColor" }: { c
 
 export interface ConversationProps {
   onInterviewActiveChange?: (isActive: boolean) => void;
+  sessionId?: string; // For deferred start with pre-generated sessionId
+  onElevenLabsIdReceived?: (elevenlabsConversationId: string) => Promise<void>; // Callback for ID mapping
 }
 
-export function Conversation({ onInterviewActiveChange }: ConversationProps) {
+export function Conversation({ onInterviewActiveChange, sessionId: providedSessionId, onElevenLabsIdReceived }: ConversationProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isEndingSession, setIsEndingSession] = useState<boolean>(false);
@@ -112,10 +114,19 @@ export function Conversation({ onInterviewActiveChange }: ConversationProps) {
   const saveTranscript = useCallback(async (role: string, content: string) => {
     const currentSessionId = sessionIdRef.current;
     if (!currentSessionId) {
-      console.warn('No ELI conversation_id (from ref) available for saving transcript.');
+      console.warn('No sessionId (from ref) available for saving transcript.');
       return;
     }
-    console.log('Saving transcript for ELI conversation_id (from ref):', { sessionId: currentSessionId, role, content });
+    
+    // ENHANCED LOGGING: Show exactly what ID we're using
+    console.log('🔍 TRANSCRIPT SAVE DEBUG:', {
+      currentSessionId: currentSessionId,
+      isProvidedSessionId: !!providedSessionId,
+      providedSessionId: providedSessionId,
+      role: role,
+      contentPreview: content.substring(0, 50) + '...'
+    });
+    
     try {
       const response = await fetch('/api/transcripts', {
         method: 'POST',
@@ -124,14 +135,15 @@ export function Conversation({ onInterviewActiveChange }: ConversationProps) {
       });
       
       if (!response.ok) {
-        console.error('Failed to save transcript. Status:', response.status, await response.json().catch(()=>({})));
+        console.error('❌ Failed to save transcript. Status:', response.status, await response.json().catch(()=>({})));
       } else {
-        console.log('Transcript saved successfully:', await response.json());
+        const result = await response.json();
+        console.log('✅ Transcript saved successfully with sessionId:', currentSessionId, result);
       }
     } catch (error) {
-      console.error('Failed to save transcript:', error);
+      console.error('❌ Failed to save transcript:', error);
     }
-  }, []);
+  }, [providedSessionId]); // Add providedSessionId as dependency for logging
 
   const onConnect = useCallback(() => {
     logClient('ElevenLabs SDK: onConnect - Voice agent connected.');
@@ -201,17 +213,28 @@ export function Conversation({ onInterviewActiveChange }: ConversationProps) {
 
   const startConversation = useCallback(async () => {
     logClient('startConversation: Initiated.');
-    if (isRubricLoading || !defaultRubricId.current || !defaultRubricName.current) {
+    
+    // If using deferred start (sessionId provided), skip rubric loading
+    if (!providedSessionId && (isRubricLoading || !defaultRubricId.current || !defaultRubricName.current)) {
       alert("Rubric information is still loading or failed to load. Please wait a moment and try again, or refresh the page.");
       return;
     }
+    
     try {
       setIsLoading(true);
       setIsEndingSession(false);
       setElapsedTime(0);
       setTranscripts([]);
       setSessionId('');
-      sessionIdRef.current = '';
+      
+      // IMPORTANT: Set sessionIdRef BEFORE starting ElevenLabs session
+      // so transcripts can be saved immediately when messages start coming
+      if (providedSessionId) {
+        sessionIdRef.current = providedSessionId; // Set this early for transcript saving
+        console.log('Set sessionId for transcript tracking BEFORE ElevenLabs start:', providedSessionId);
+      } else {
+        sessionIdRef.current = ''; // Will be set to ElevenLabs ID in legacy mode
+      }
 
       await navigator.mediaDevices.getUserMedia({ audio: true });
       const signedUrl = await getSignedUrl();
@@ -239,27 +262,40 @@ export function Conversation({ onInterviewActiveChange }: ConversationProps) {
       }
       
       console.log('ElevenLabs session successfully started. ELI Conversation ID:', extractedEliConversationId);
-      setSessionId(extractedEliConversationId);
-
-      // Record session metadata in our DB using the ELI conversation_id
-      try {
-        const metaResponse = await fetch('/api/sessions/start', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sessionId: extractedEliConversationId, 
-            rubricId: defaultRubricId.current,
-            rubricName: defaultRubricName.current,
-            interviewType: defaultRubricName.current 
-          }),
-        });
-        if (metaResponse.ok) {
-          console.log('Session metadata saved using ELI ID:', await metaResponse.json());
-        } else {
-          console.error('Failed to save session metadata:', await metaResponse.text());
+      
+      // Handle different session modes
+      if (providedSessionId) {
+        // Deferred start mode: sessionIdRef already set above, DON'T update sessionId state
+        // to avoid the useEffect overwriting sessionIdRef.current
+        console.log('Deferred mode: Keeping sessionIdRef set to internal UUID:', sessionIdRef.current);
+        
+        // Call the mapping callback if provided
+        if (onElevenLabsIdReceived) {
+          await onElevenLabsIdReceived(extractedEliConversationId);
         }
-      } catch (err) {
-        console.error('Error saving session metadata:', err);
+      } else {
+        // Legacy mode: Set sessionId state AND sessionIdRef to ElevenLabs ID
+        setSessionId(extractedEliConversationId);
+        sessionIdRef.current = extractedEliConversationId; // Set for transcript saving in legacy mode
+        try {
+          const metaResponse = await fetch('/api/sessions/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              sessionId: extractedEliConversationId, 
+              rubricId: defaultRubricId.current,
+              rubricName: defaultRubricName.current,
+              interviewType: defaultRubricName.current 
+            }),
+          });
+          if (metaResponse.ok) {
+            console.log('Session metadata saved using ELI ID:', await metaResponse.json());
+          } else {
+            console.error('Failed to save session metadata:', await metaResponse.text());
+          }
+        } catch (err) {
+          console.error('Error saving session metadata:', err);
+        }
       }
 
     } catch (error) {
@@ -268,7 +304,7 @@ export function Conversation({ onInterviewActiveChange }: ConversationProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [conversation, defaultRubricId, defaultRubricName, isRubricLoading]);
+  }, [conversation, defaultRubricId, defaultRubricName, isRubricLoading, providedSessionId, onElevenLabsIdReceived]);
 
   const stopConversation = useCallback(async () => {
     logClient('stopConversation: Initiated.');
@@ -291,9 +327,11 @@ export function Conversation({ onInterviewActiveChange }: ConversationProps) {
     } catch (error: any) {
       logger.error({ event: 'ElevenLabsEndSessionError', details: { sessionId: currentSessionId }, error: error });
     } finally {
-      router.push(`/processing/${currentSessionId}`);
+      // Use provided sessionId if available, otherwise use the current sessionId
+      const sessionIdForRouting = providedSessionId || currentSessionId;
+      router.push(`/processing/${sessionIdForRouting}`);
     }
-  }, [conversation, router, onInterviewActiveChange]);
+  }, [conversation, router, onInterviewActiveChange, providedSessionId]);
 
   // Initial state check - if conversation status is not connected, it's not active.
   useEffect(() => {

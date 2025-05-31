@@ -46,9 +46,11 @@ You may answer “you decide” to any question. Wait for **explicit confirmatio
 - Describe how this fits into the current app architecture (reuse where possible).
 - List 1–2 **alternatives considered**, and why they were rejected including the tradeoffs made. 
 
-**✅ Before proceeding, pause here.**
-Return the proposed architecture and approach. Wait for user confirmation before continuing to implementation planning.
+> Respond to the user:  
+> “I’ve outlined the architecture and approach. Ready to proceed with implementation plan?"
+> Wait for an explicit “Go” or “Let’s proceed.”
 
+Anticipate user to challenge assumptions. 
 > _Prompt the user to challenge assumptions_:  
 > “What’s the simplest version of this that still solves the user’s problem?”  
 > “Are we reusing existing components — and if not, why?”  

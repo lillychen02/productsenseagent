@@ -125,23 +125,26 @@ export async function POST(request: NextRequest) {
     }
 
     ({ db } = await connectToDatabase());
-    logger.info({ event: 'WebhookDB', message: 'Attempting to find session metadata for sessionId:', details: { sessionId: webhookSessionIdFromPayload }});
-    sessionMeta = await db.collection<SessionMetadata>('sessions_metadata').findOne({ sessionId: webhookSessionIdFromPayload });
+    logger.info({ event: 'WebhookDB', message: 'Attempting to find session metadata for ElevenLabs conversation ID:', details: { elevenlabsConversationId: webhookSessionIdFromPayload }});
+    
+    // Updated: Search by elevenlabsConversationId instead of sessionId
+    sessionMeta = await db.collection<SessionMetadata>('sessions_metadata').findOne({ elevenlabsConversationId: webhookSessionIdFromPayload });
 
     if (!sessionMeta) {
-      logger.error({ event: 'WebhookError', message: 'No session metadata found.', details: { sessionId: webhookSessionIdFromPayload }});
+      logger.error({ event: 'WebhookError', message: 'No session metadata found for ElevenLabs conversation ID.', details: { elevenlabsConversationId: webhookSessionIdFromPayload }});
       return NextResponse.json({ message: 'Webhook received, but no session metadata found. Scoring not triggered.' }, { status: 200 });
     }
-    logger.info({ event: 'WebhookSessionMetaFound', details: { sessionId: webhookSessionIdFromPayload, currentStatus: sessionMeta.status } });
+    logger.info({ event: 'WebhookSessionMetaFound', details: { elevenlabsConversationId: webhookSessionIdFromPayload, internalSessionId: sessionMeta.sessionId, currentStatus: sessionMeta.status } });
 
     rubricIdToUse = sessionMeta.rubricId.toString();
     rubricNameToUse = sessionMeta.rubricName;
     now = new Date();
 
     // After payload verification -> set status='webhook_received'
+    // Updated: Use internal sessionId for updates, not ElevenLabs ID
     try {
       await db.collection<SessionMetadata>('sessions_metadata').updateOne(
-        { sessionId: webhookSessionIdFromPayload }, 
+        { sessionId: sessionMeta.sessionId }, // Use our internal sessionId for updates
         { 
           $set: { 
             status: 'webhook_received', 
@@ -152,9 +155,9 @@ export async function POST(request: NextRequest) {
           }
         }
       );
-      logger.info({ event: 'WebhookStatusUpdated', details: { sessionId: webhookSessionIdFromPayload, newStatus: 'webhook_received' } });
+      logger.info({ event: 'WebhookStatusUpdated', details: { internalSessionId: sessionMeta.sessionId, elevenlabsConversationId: webhookSessionIdFromPayload, newStatus: 'webhook_received' } });
     } catch (dbUpdateError: any) {
-      logger.error({ event: 'WebhookDBError', message: 'Failed to update session metadata for webhook_received', details: { sessionId: webhookSessionIdFromPayload }, error: dbUpdateError.message });
+      logger.error({ event: 'WebhookDBError', message: 'Failed to update session metadata for webhook_received', details: { internalSessionId: sessionMeta.sessionId, elevenlabsConversationId: webhookSessionIdFromPayload }, error: dbUpdateError.message });
       // Potentially critical, but let's see if scoring can still be triggered
     }
 
@@ -169,11 +172,12 @@ export async function POST(request: NextRequest) {
       logger.info({ 
         event: 'WebhookAttemptingScoringJobCreation', 
         message: 'Call status is done. Preparing to create scoring job.', 
-        details: { sessionId: webhookSessionIdFromPayload, rubricId: rubricIdToUse, rubricName: rubricNameToUse }
+        details: { internalSessionId: sessionMeta.sessionId, elevenlabsConversationId: webhookSessionIdFromPayload, rubricId: rubricIdToUse, rubricName: rubricNameToUse }
       });
       
+      // Updated: Use internal sessionId for job creation, not ElevenLabs ID
       const newScoringJobData: Omit<ScoringJob, '_id'> = {
-        sessionId: webhookSessionIdFromPayload!,
+        sessionId: sessionMeta.sessionId, // Use our internal sessionId for job processing
         rubricId: rubricIdToUse,
         rubricName: rubricNameToUse,
         status: 'pending',
@@ -188,30 +192,30 @@ export async function POST(request: NextRequest) {
       let newJobId: ObjectId | undefined = undefined;
       let finalSessionStatusForEnqueue: SessionStatus = 'scoring_enqueued';
 
-      logger.info({ event: 'PreScoringJobInsert', details: { sessionId: webhookSessionIdFromPayload, jobData: newScoringJobData } });
+      logger.info({ event: 'PreScoringJobInsert', details: { internalSessionId: sessionMeta.sessionId, elevenlabsConversationId: webhookSessionIdFromPayload, jobData: newScoringJobData } });
 
       try {
         const insertResult = await db.collection<ScoringJob>('scoring_jobs').insertOne(newScoringJobData as ScoringJob);
         logger.info({ 
           event: 'ScoringJobInsertAttempted', 
           details: { 
-              sessionId: webhookSessionIdFromPayload, 
+              sessionId: sessionMeta.sessionId, 
               acknowledged: insertResult.acknowledged, 
               insertedId: insertResult.insertedId 
           }
         });
 
         if (!insertResult.insertedId) {
-          logger.warn({ event: 'ScoringJobInsertNoId', details: { sessionId: webhookSessionIdFromPayload, acknowledged: insertResult.acknowledged }, message: 'insertOne into scoring_jobs acknowledged but returned no insertedId.' });
+          logger.warn({ event: 'ScoringJobInsertNoId', details: { sessionId: sessionMeta.sessionId, acknowledged: insertResult.acknowledged }, message: 'insertOne into scoring_jobs acknowledged but returned no insertedId.' });
           throw new Error('Failed to insert scoring job, no insertedId returned by MongoDB.');
         }
         newJobId = insertResult.insertedId;
-        logger.info({ event: 'WebhookScoringJobCreated', details: { sessionId: webhookSessionIdFromPayload, jobId: newJobId }});
+        logger.info({ event: 'WebhookScoringJobCreated', details: { sessionId: sessionMeta.sessionId, jobId: newJobId }});
       } catch (error: any) {
         logger.error({ 
           event: 'WebhookScoringJobCreationErrorCatch', 
           message: 'Error caught during scoring_jobs.insertOne.', 
-          details: { sessionId: webhookSessionIdFromPayload }, 
+          details: { sessionId: sessionMeta.sessionId }, 
           error: { message: error.message, stack: error.stack, name: error.name } 
         });
         jobCreationError = error.message || "Failed to insert scoring job into database.";
@@ -221,7 +225,7 @@ export async function POST(request: NextRequest) {
       logger.info({ 
         event: 'PreSessionMetaUpdateAfterJobAttempt', 
         details: { 
-          sessionId: webhookSessionIdFromPayload, 
+          sessionId: sessionMeta.sessionId, 
           finalSessionStatusForEnqueue, 
           jobCreationError, 
           newJobId: newJobId?.toString() 
@@ -231,7 +235,7 @@ export async function POST(request: NextRequest) {
       // Update session_metadata based on job creation outcome
       try {
         await db.collection<SessionMetadata>('sessions_metadata').updateOne(
-          { sessionId: webhookSessionIdFromPayload },
+          { sessionId: sessionMeta.sessionId },
           { $set: { 
               status: finalSessionStatusForEnqueue, 
               status_updated_at: new Date(), 
@@ -240,32 +244,32 @@ export async function POST(request: NextRequest) {
               updatedAt: new Date() 
             }}
         );
-        logger.info({ event: 'WebhookSessionStatusAfterJobAttempt', details: { sessionId: webhookSessionIdFromPayload, status: finalSessionStatusForEnqueue, jobId: newJobId?.toString() }});
+        logger.info({ event: 'WebhookSessionStatusAfterJobAttempt', details: { sessionId: sessionMeta.sessionId, status: finalSessionStatusForEnqueue, jobId: newJobId?.toString() }});
         if (finalSessionStatusForEnqueue === 'scoring_enqueue_failed') {
           sendDiscordAlert(
             "Scoring Job Creation Failed",
-            `Failed to create scoring job for session ID: ${webhookSessionIdFromPayload}.`, 
+            `Failed to create scoring job for session ID: ${sessionMeta.sessionId}.`, 
             [
-              { name: "Session ID", value: webhookSessionIdFromPayload!, inline: true },
+              { name: "Session ID", value: sessionMeta.sessionId, inline: true },
               { name: "Error", value: jobCreationError || 'Unknown error', inline: false }
             ]
           );
         }
       } catch (dbUpdateError: any) {
-        logger.error({ event: 'WebhookDBError', message: 'Failed to update session_metadata after scoring job attempt.', details: { sessionId: webhookSessionIdFromPayload }, error: dbUpdateError });
+        logger.error({ event: 'WebhookDBError', message: 'Failed to update session_metadata after scoring job attempt.', details: { sessionId: sessionMeta.sessionId }, error: dbUpdateError });
       }
       
       // Conditionally process the job immediately in development if enqueue was successful
       if (finalSessionStatusForEnqueue === 'scoring_enqueued' && process.env.NODE_ENV === 'development') {
-        logger.info({ event: 'WebhookDevAutoProcessing', message: 'Development mode: Auto-processing enqueued scoring job.', details: { sessionId: webhookSessionIdFromPayload, jobId: newJobId?.toString() }});
+        logger.info({ event: 'WebhookDevAutoProcessing', message: 'Development mode: Auto-processing enqueued scoring job.', details: { sessionId: sessionMeta.sessionId, jobId: newJobId?.toString() }});
         try {
           // Don't necessarily await this if the webhook needs to respond quickly,
           // but for local dev, awaiting gives more synchronous test feedback.
           // If this call is slow, it could make the webhook timeout to ElevenLabs.
           await processOneScoringJob(); 
-          logger.info({ event: 'WebhookDevAutoProcessingComplete', details: { sessionId: webhookSessionIdFromPayload }});
+          logger.info({ event: 'WebhookDevAutoProcessingComplete', details: { sessionId: sessionMeta.sessionId }});
         } catch (processingError: any) {
-          logger.error({ event: 'WebhookDevAutoProcessingError', message: 'Error during development auto-processing of job.', details: { sessionId: webhookSessionIdFromPayload, jobId: newJobId?.toString() }, error: processingError });
+          logger.error({ event: 'WebhookDevAutoProcessingError', message: 'Error during development auto-processing of job.', details: { sessionId: sessionMeta.sessionId, jobId: newJobId?.toString() }, error: processingError });
           // The job processor itself should handle updating job/session status for this error.
         }
       }
@@ -276,15 +280,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Webhook received, scoring job created successfully.' }, { status: 200 });
 
     } else {
-      logger.info({ event: 'WebhookAction', message: 'Conditions NOT MET for session. Scoring not triggered.', details: { sessionId: webhookSessionIdFromPayload, callStatus } });
+      logger.info({ event: 'WebhookAction', message: 'Conditions NOT MET for session. Scoring not triggered.', details: { internalSessionId: sessionMeta.sessionId, elevenlabsConversationId: webhookSessionIdFromPayload, callStatus } });
       try {
         await db.collection<SessionMetadata>('sessions_metadata').updateOne(
-          { sessionId: webhookSessionIdFromPayload }, 
+          { sessionId: sessionMeta.sessionId }, 
           { $set: { status: 'webhook_received_not_scored', status_updated_at: new Date(), "payload.webhook_end_reason": endReason, "payload.webhook_call_status": callStatus, updatedAt: new Date() } }
         );
-        logger.info({ event: 'WebhookStatusUpdated', details: { sessionId: webhookSessionIdFromPayload, newStatus: 'webhook_received_not_scored' } });
+        logger.info({ event: 'WebhookStatusUpdated', details: { sessionId: sessionMeta.sessionId, newStatus: 'webhook_received_not_scored' } });
       } catch (dbUpdateError: any) {
-        logger.error({ event: 'WebhookDBError', message: 'Failed to update session to webhook_received_not_scored', details: { sessionId: webhookSessionIdFromPayload }, error: dbUpdateError });
+        logger.error({ event: 'WebhookDBError', message: 'Failed to update session to webhook_received_not_scored', details: { sessionId: sessionMeta.sessionId }, error: dbUpdateError });
       }
       return NextResponse.json({ message: 'Webhook received, scoring not applicable for this event.' }, { status: 200 });
     }

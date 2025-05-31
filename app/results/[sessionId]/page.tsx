@@ -6,8 +6,6 @@ import Link from 'next/link';
 import { ChatBubbleIcon } from './ChatBubbleIcon';
 import { AskLoopieSidebar } from './AskLoopieSidebar';
 import { motion, AnimatePresence } from 'framer-motion';
-import InlineEmailForm from '../../components/InlineEmailForm';
-import { type InterviewData as EmailReportData } from '../../../lib/types/email'; // Updated import path
 
 // Minimal interfaces for data fetched - align with api/results/[sessionId]/route.ts
 interface ScoreItem {
@@ -111,8 +109,6 @@ export default function ResultsPage() {
   const [initialLoopieMessage, setInitialLoopieMessage] = useState<string | undefined>(undefined);
   const feedbackContentRef = useRef<HTMLDivElement>(null);
   const elaborateButtonRef = useRef<HTMLButtonElement>(null);
-  const emailFormRef = useRef<HTMLDivElement>(null);
-  const [isSubmittingEmail, setIsSubmittingEmail] = useState(false); // For loading state on email form
 
   useEffect(() => {
     if (sessionId) {
@@ -137,62 +133,6 @@ export default function ResultsPage() {
       fetchResults();
     }
   }, [sessionId]);
-
-  const handleEmailSubmit = async (email: string) => {
-    if (!resultData || !resultData.scoreData) {
-      console.error("handleEmailSubmit: No resultData available to send.");
-      throw new Error("Interview results are not loaded yet. Please wait and try again.");
-    }
-    if (isSubmittingEmail) return;
-
-    setIsSubmittingEmail(true);
-
-    const reportDataForEmail: EmailReportData = {
-      recommendation: resultData.scoreData.llmResponse?.overall_recommendation || 'N/A',
-      date: new Date(resultData.scoreData.scoredAt).toLocaleDateString(),
-      interviewType: resultData.scoreData.rubricName || 'General Interview',
-      skills: resultData.scoreData.llmResponse?.scores?.map(skill => ({
-        name: skill.dimension,
-        score: skill.score,
-        emoji: getScoreEmoji(skill.score),
-        feedback: { // Populate the detailed feedback
-          strengths: skill.feedback?.strengths || [],
-          weaknesses: skill.feedback?.weaknesses || [],
-          exemplar_response_suggestion: skill.feedback?.exemplar_response_suggestion
-        }
-      })) || [],
-      summary: resultData.scoreData.llmResponse?.summary_feedback || 'No summary provided.',
-      sessionLink: `${process.env.NEXT_PUBLIC_APP_URL || 'https://askloopie.com'}/results/${sessionId}`,
-    };
-
-    try {
-      const response = await fetch('/api/send-results', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: email, 
-          userName: undefined, // Or pass actual userName if available and desired
-          interviewReportData: reportDataForEmail,
-          sessionId: sessionId // Add sessionId to the payload
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: "Failed to send email. Please try again." }));
-        throw new Error(errorData.message || `API Error: ${response.status}`);
-      }
-      
-      console.log("Email results API call successful");
-
-    } catch (error: any) {
-      console.error("Failed to send email results:", error);
-      throw error; 
-    } finally {
-      setIsSubmittingEmail(false);
-    }
-  };
 
   const handleDownloadTranscript = () => {
     if (resultData?.transcriptText) {
@@ -276,15 +216,6 @@ export default function ResultsPage() {
 
     if (selectedText && selection && selection.rangeCount > 0) {
       const range = selection.getRangeAt(0);
-
-      // Check if the selection is within the email form
-      if (emailFormRef.current && emailFormRef.current.contains(range.commonAncestorContainer)) {
-        // If selection is within email form, ensure the elaborate button is hidden
-        if (selectionAction.visible) {
-            setSelectionAction({ visible: false, selectedText: '', top: 0, left: 0, width: 0 });
-        }
-        return; // Don't show elaborate button for email form text
-      }
 
       const rect = range.getBoundingClientRect();
       let newTop = rect.bottom + window.scrollY + 8;
@@ -398,8 +329,6 @@ export default function ResultsPage() {
               </p>
             )}
           </header>
-
-          {sessionId && <InlineEmailForm ref={emailFormRef} onSubmit={handleEmailSubmit} sessionId={sessionId} />}
 
           {scoreData.llmResponse?.scores && scoreData.llmResponse.scores.length > 0 && (
             <section className="mb-8 text-left">

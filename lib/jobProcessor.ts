@@ -5,6 +5,7 @@ import { type ScoringJob, type ScoringJobStatus } from './types/jobs';
 import { type SessionStatus, type SessionMetadata } from './types/session';
 import { executeScoring, LLMProcessingError, DatabaseError } from './scoringService'; // Assuming StoredScore is implicitly handled or not needed as direct return here
 import { sendDiscordAlert } from './monitoringUtils';
+import { sendResultsEmailAfterScoring } from './services/emailService'; // Corrected import path
 
 const MAX_JOB_PROCESSING_ATTEMPTS_FROM_CONFIG = process.env.MAX_JOB_ATTEMPTS ? parseInt(process.env.MAX_JOB_ATTEMPTS) : 3;
 const PROCESSING_TIMEOUT_MS_FROM_CONFIG = process.env.SCORING_TIMEOUT_MS ? parseInt(process.env.SCORING_TIMEOUT_MS) : 55000;
@@ -54,7 +55,11 @@ export async function processOneScoringJob(): Promise<{ jobId?: string | ObjectI
     return { status: 'no_jobs', message: 'No jobs to process' };
   }
 
-  logger.info({ event: 'ProcessingScoringJob', details: { jobId: job._id, sessionId: job.sessionId, attempt: job.attempts } });
+  // Ensure job has _id and sessionId for logging, should always be true if job is found
+  const jobIdForLogging = job?._id;
+  const sessionIdForLogging = job?.sessionId;
+
+  logger.info({ event: 'ProcessingScoringJob', details: { jobId: jobIdForLogging, sessionId: sessionIdForLogging, attempt: job?.attempts } });
 
   try {
     const scoringPromise = executeScoring(job.sessionId, job.rubricId);
@@ -65,15 +70,64 @@ export async function processOneScoringJob(): Promise<{ jobId?: string | ObjectI
     await Promise.race([scoringPromise, timeoutPromise]);
 
     await updateSessionMetadataStatusInJobContext(job.sessionId, 'scored_successfully', db);
+
+    // --- BEGIN NEW LOGIC FOR EMAILING RESULTS ---
+    try {
+      const sessionMeta = await db.collection<SessionMetadata>('sessions_metadata').findOne({ sessionId: job.sessionId });
+      if (sessionMeta && sessionMeta.email && !sessionMeta.results_email_sent) {
+        logger.info({ 
+          event: 'AttemptingToSendResultsEmailPostScoring', 
+          details: { jobId: jobIdForLogging, sessionId: sessionIdForLogging, recipientEmail: sessionMeta.email } 
+        });
+        
+        const emailSentSuccessfully = await sendResultsEmailAfterScoring(job.sessionId, sessionMeta.email /*, sessionMeta.userNameIfAvailable */);
+
+        if (emailSentSuccessfully) {
+          logger.info({ 
+            event: 'ResultsEmailSentSuccessfullyPostScoring', 
+            details: { jobId: jobIdForLogging, sessionId: sessionIdForLogging } 
+          });
+          await db.collection<SessionMetadata>('sessions_metadata').updateOne(
+            { sessionId: job.sessionId },
+            { $set: { results_email_sent: true, updatedAt: new Date() } }
+          );
+        } else {
+          logger.warn({ 
+            event: 'ResultsEmailSendFailedPostScoring', 
+            details: { jobId: jobIdForLogging, sessionId: sessionIdForLogging, recipientEmail: sessionMeta.email },
+            message: 'sendResultsEmailAfterScoring returned false.'
+          });
+        }
+      } else if (sessionMeta && !sessionMeta.email) {
+        logger.warn({ 
+          event: 'NoEmailForResultsPostScoring', 
+          details: { jobId: jobIdForLogging, sessionId: sessionIdForLogging },
+          message: 'No email found in session metadata to send results.'
+        });
+      } else if (sessionMeta && sessionMeta.results_email_sent) {
+        logger.info({ 
+            event: 'ResultsEmailAlreadySentSkipping', 
+            details: { jobId: jobIdForLogging, sessionId: sessionIdForLogging } 
+        });
+      }
+    } catch (emailError: any) {
+      logger.error({ 
+        event: 'ErrorDuringEmailSendingLogicPostScoring', 
+        details: { jobId: jobIdForLogging, sessionId: sessionIdForLogging, error: emailError.message, stack: emailError.stack },
+        message: 'An unexpected error occurred while trying to send results email post-scoring.'
+      });
+    }
+    // --- END NEW LOGIC FOR EMAILING RESULTS ---
+
     await db.collection<ScoringJob>('scoring_jobs').updateOne(
       { _id: job._id },
       { $set: { status: 'completed', processed_at: new Date(), updatedAt: new Date(), status_error: null } }
     );
-    logger.info({ event: 'ScoringJobCompleted', details: { jobId: job._id, sessionId: job.sessionId } });
+    logger.info({ event: 'ScoringJobCompleted', details: { jobId: jobIdForLogging, sessionId: sessionIdForLogging } });
     return { jobId: job._id, sessionId: job.sessionId, status: 'completed', message: `Job ${job._id?.toString()} completed successfully.` };
 
   } catch (err: any) {
-    logger.error({ event: 'ScoringJobFailed', details: { jobId: job._id, sessionId: job.sessionId, attempt: job.attempts }, message: err.message, error: err });
+    logger.error({ event: 'ScoringJobFailed', details: { jobId: jobIdForLogging, sessionId: sessionIdForLogging, attempt: job?.attempts }, message: err.message, error: err });
     let sessionErrorStatus: SessionStatus = 'scoring_failed_db';
     if (err instanceof LLMProcessingError) {
       sessionErrorStatus = 'scoring_failed_llm';
