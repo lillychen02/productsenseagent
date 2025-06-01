@@ -53,10 +53,10 @@ export default function InterviewPage() {
       <div className="max-w-4xl mx-auto px-4 py-8">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Product Sense Interview
+            Ready to start?
           </h1>
-          <p className="text-gray-600">
-            Ready to begin your interview? Click the microphone to start.
+          <p className="text-xl text-gray-800 font-medium mb-3">
+            Product Sense Interview
           </p>
         </div>
 
