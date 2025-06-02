@@ -1,70 +1,89 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { connectToDatabase } from '../../../../lib/mongodb'; // Adjust path as needed
+import { connectToDatabase } from '../../../../lib/mongodb'; // Adjust path based on actual location
 import { ObjectId } from 'mongodb';
+import { v4 as uuidv4 } from 'uuid';
+import { logger } from '../../../../lib/logger'; // Adjust path
+import { SessionMetadata, SessionStatus } from '../../../../lib/types/session'; // Adjust path
 
-interface SessionMetadata {
-  _id?: ObjectId;
-  sessionId: string;
-  rubricId: ObjectId;
-  rubricName?: string; 
-  interviewType?: string;
-  startTime: Date;
-  status: 'started' | 'webhook_received' | 'scoring_triggered' | 'scored' | 'error_scoring' | 'error_webhook';
-  updatedAt: Date;
-}
+// Default values for Product Sense interview
+const DEFAULT_PRODUCT_SENSE_RUBRIC_ID = '681e7b94bed6ffb4a14f3e1f';
+const DEFAULT_PRODUCT_SENSE_INTERVIEW_TYPE = 'Product Sense';
+
+// Basic email validation regex
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const { sessionId, rubricId, rubricName, interviewType } = body as 
-      { sessionId: string; rubricId: string; rubricName?: string; interviewType?: string };
+  const baseLogPayload = {
+    handler: 'POST /api/sessions/start',
+    // sessionIdGenerated will be added later if successful
+  };
 
-    if (!sessionId || !rubricId) {
-      return NextResponse.json({ error: 'Missing sessionId or rubricId' }, { status: 400 });
+  try {
+    let requestBody;
+    try {
+      requestBody = await request.json();
+    } catch (e) {
+      logger.warn({ ...baseLogPayload, event: 'RequestBodyParseError', details: { error: (e as Error).message }, message: 'Failed to parse request body as JSON.' });
+      return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 });
     }
+
+    const {
+      email,
+      rubricId: reqRubricId,
+      interviewType: reqInterviewType,
+    } = requestBody as { email?: string; rubricId?: string; interviewType?: string };
+
+    if (!email || typeof email !== 'string' || !EMAIL_REGEX.test(email)) {
+      logger.warn({ ...baseLogPayload, event: 'InvalidEmailFormat', details: { providedEmail: email }, message: 'Invalid or missing email.' });
+      return NextResponse.json({ error: 'Valid email is required.' }, { status: 400 });
+    }
+
+    const internalSessionId = uuidv4();
+    const currentLogPayload = { ...baseLogPayload, sessionIdGenerated: internalSessionId, requestBody }; // Add sessionId and full body now
+
+    const rubricIdToUse = reqRubricId || DEFAULT_PRODUCT_SENSE_RUBRIC_ID;
+    const interviewTypeToUse = reqInterviewType || DEFAULT_PRODUCT_SENSE_INTERVIEW_TYPE;
 
     let mongoRubricId;
     try {
-      mongoRubricId = new ObjectId(rubricId);
+      mongoRubricId = new ObjectId(rubricIdToUse);
     } catch (error) {
-      return NextResponse.json({ error: 'Invalid rubricId format' }, { status: 400 });
+      logger.warn({ ...currentLogPayload, event: 'InvalidRubricIdFormat', details: { providedRubricId: rubricIdToUse, error: (error as Error).message }, message: 'Invalid rubricId format.' });
+      return NextResponse.json({ error: 'Invalid rubricId format. Must be a 24-character hex string.' }, { status: 400 });
     }
 
     const { db } = await connectToDatabase();
+    const now = new Date();
 
-    const newSessionMetadata: Omit<SessionMetadata, '_id'> = {
-      sessionId,
+    const newSessionMetadata: Omit<SessionMetadata, '_id' | 'startTime'> & { startTime: Date } = {
+      sessionId: internalSessionId,
+      email: email,
       rubricId: mongoRubricId,
-      rubricName: rubricName || 'N/A',
-      interviewType: interviewType || 'N/A',
-      startTime: new Date(),
-      status: 'started',
-      updatedAt: new Date(),
+      rubricName: interviewTypeToUse, 
+      interviewType: interviewTypeToUse,
+      startTime: now, 
+      status: 'session_initiated' as SessionStatus, 
+      status_updated_at: now,
+      updatedAt: now,
+      results_email_sent: false, 
     };
-
-    // Optional: Check if a session with this sessionId already exists to prevent duplicates
-    // const existingSession = await db.collection<SessionMetadata>('sessions_metadata').findOne({ sessionId });
-    // if (existingSession) {
-    //   console.warn(`Session metadata for sessionId ${sessionId} already exists. Updating status or ignoring.`);
-    //   // Potentially update status or just return existing, depending on desired logic
-    //   return NextResponse.json({ message: 'Session metadata already exists', session: existingSession }, { status: 200 });
-    // }
+    
+    logger.info({ ...currentLogPayload, event: 'AttemptingToInsertSession', details: { sessionMetadataToInsert: newSessionMetadata }, message: 'Attempting to insert new session metadata.' });
 
     const result = await db.collection<SessionMetadata>('sessions_metadata').insertOne(newSessionMetadata as SessionMetadata);
 
     if (!result.insertedId) {
-      return NextResponse.json({ error: 'Failed to save session metadata' }, { status: 500 });
+      logger.error({ ...currentLogPayload, event: 'SessionInsertFailedDB', details: { dbResult: result }, message: 'Failed to save session metadata to database.' });
+      return NextResponse.json({ error: 'Failed to create session.' }, { status: 500 });
     }
 
-    const createdSessionMetadata = await db.collection<SessionMetadata>('sessions_metadata').findOne({ _id: result.insertedId });
+    logger.info({ ...currentLogPayload, event: 'SessionInsertSuccess', details: { insertedId: result.insertedId.toHexString() }, message: 'Session metadata saved successfully.' });
 
-    return NextResponse.json({ message: 'Session metadata saved successfully', sessionMetadata: createdSessionMetadata }, { status: 201 });
+    return NextResponse.json({ sessionId: internalSessionId }, { status: 201 });
 
-  } catch (error) {
-    console.error('Error in POST /api/sessions/start:', error);
-    if (error instanceof SyntaxError) {
-      return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 });
-    }
-    return NextResponse.json({ error: 'Failed to save session metadata' }, { status: 500 });
+  } catch (error: any) {
+    // Log with baseLogPayload as internalSessionId might not be set if error is early
+    logger.error({ ...baseLogPayload, event: 'UnhandledError', details: { errorMessage: error.message, stack: error.stack, errorObject: error }, message: 'An unexpected error occurred.'});
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 } 

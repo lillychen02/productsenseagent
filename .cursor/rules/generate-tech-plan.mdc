@@ -1,0 +1,87 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+## ✅ GOAL
+To write a **detailed, phased technical plan** in Markdown format based on a product requirements document (PRD) or product idea. This plan should be suitable for a junior developer to follow and aligned with the app’s existing architecture and constraints.
+
+---
+
+## 📦 OUTPUT
+- **Format:** Markdown (`.md`)
+- **Location:** `/tech-plans/`
+- **Filename:** `tech-plan-[feature].md` (e.g., `tech-plan-feedback-chat.md`)
+
+---
+
+## 🔁 WORKFLOW
+
+### 1. Intake
+Accepts a product idea, feature request or product requirements document (PRD) as input. 
+
+### 2. Ask Clarifying Questions
+Before generation, ask:
+- 2.1 What problem does this solve?
+- 2.2 Who is the user?
+- 2.3 Where does this appear in the app?
+- 2.4 Are there any constraints (technical, design, timeline)?
+- 2.5 Are we reusing or replacing any existing components?
+
+You may answer “you decide” to any question. Wait for **explicit confirmation** (e.g. “Looks good”, “Let’s proceed”) before proceeding. 
+
+---
+
+## 🧠 TECHNICAL PLAN STRUCTURE
+
+### OVERVIEW
+- Describe the feature in 1–2 sentences.
+- Define what success looks like (e.g., metrics, user outcomes).
+
+---
+
+### ARCHITECTURE & APPROACH
+- Propose a high-level system design (components, data flow, state management).
+- Specify internal services, shared components, and third-party APIs.
+- Describe how this fits into the current app architecture (reuse where possible).
+- List 1–2 **alternatives considered**, and why they were rejected including the tradeoffs made. 
+
+> Respond to the user:  
+> “I’ve outlined the architecture and approach. Ready to proceed with implementation plan?"
+> Wait for an explicit “Go” or “Let’s proceed.”
+
+Anticipate user to challenge assumptions. 
+> _Prompt the user to challenge assumptions_:  
+> “What’s the simplest version of this that still solves the user’s problem?”  
+> “Are we reusing existing components — and if not, why?”  
+> “If we had to change this in 3 months, how painful would it be?”
+
+---
+
+### PHASED IMPLEMENTATION PLAN
+Break the implementation into logical phases (e.g., Routing, Backend, UI, Feedback).
+
+Each phase must include:
+- **Goals** (what's being delivered)
+- **Key Tasks**
+- **Success Criteria** (Checkboxes preferred if possible)
+
+> Example phases:
+> - Phase 1: Routing & Setup
+> - Phase 2: Data Model & API
+> - Phase 3: UI & Interactivity
+> - Phase 4: QA & Instrumentation
+
+---
+
+### RISKS & MITIGATIONS
+- Identify technical, architectural, or experience-related risks.
+- Describe mitigation strategies or fallback plans.
+
+---
+
+## 🔧 FORMATTING GUIDELINES
+- Use markdown with section headers (`###`, `-`, `*`).
+- Prefer bullet points and short, crisp paragraphs.
+- Use inline code for file paths, functions, and API endpoints when relevant.
+- Write for clarity — this is meant to be readable by LLMs and junior engineers alike.

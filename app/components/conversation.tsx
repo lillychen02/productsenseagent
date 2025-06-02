@@ -28,9 +28,11 @@ const PhoneDisabledIcon = ({ className = "w-6 h-6", fill = "currentColor" }: { c
 
 export interface ConversationProps {
   onInterviewActiveChange?: (isActive: boolean) => void;
+  sessionId?: string; // For deferred start with pre-generated sessionId
+  onElevenLabsIdReceived?: (elevenlabsConversationId: string) => Promise<void>; // Callback for ID mapping
 }
 
-export function Conversation({ onInterviewActiveChange }: ConversationProps) {
+export function Conversation({ onInterviewActiveChange, sessionId: providedSessionId, onElevenLabsIdReceived }: ConversationProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isEndingSession, setIsEndingSession] = useState<boolean>(false);
@@ -112,10 +114,19 @@ export function Conversation({ onInterviewActiveChange }: ConversationProps) {
   const saveTranscript = useCallback(async (role: string, content: string) => {
     const currentSessionId = sessionIdRef.current;
     if (!currentSessionId) {
-      console.warn('No ELI conversation_id (from ref) available for saving transcript.');
+      console.warn('No sessionId (from ref) available for saving transcript.');
       return;
     }
-    console.log('Saving transcript for ELI conversation_id (from ref):', { sessionId: currentSessionId, role, content });
+    
+    // ENHANCED LOGGING: Show exactly what ID we're using
+    console.log('🔍 TRANSCRIPT SAVE DEBUG:', {
+      currentSessionId: currentSessionId,
+      isProvidedSessionId: !!providedSessionId,
+      providedSessionId: providedSessionId,
+      role: role,
+      contentPreview: content.substring(0, 50) + '...'
+    });
+    
     try {
       const response = await fetch('/api/transcripts', {
         method: 'POST',
@@ -124,14 +135,15 @@ export function Conversation({ onInterviewActiveChange }: ConversationProps) {
       });
       
       if (!response.ok) {
-        console.error('Failed to save transcript. Status:', response.status, await response.json().catch(()=>({})));
+        console.error('❌ Failed to save transcript. Status:', response.status, await response.json().catch(()=>({})));
       } else {
-        console.log('Transcript saved successfully:', await response.json());
+        const result = await response.json();
+        console.log('✅ Transcript saved successfully with sessionId:', currentSessionId, result);
       }
     } catch (error) {
-      console.error('Failed to save transcript:', error);
+      console.error('❌ Failed to save transcript:', error);
     }
-  }, []);
+  }, [providedSessionId]); // Add providedSessionId as dependency for logging
 
   const onConnect = useCallback(() => {
     logClient('ElevenLabs SDK: onConnect - Voice agent connected.');
@@ -201,17 +213,28 @@ export function Conversation({ onInterviewActiveChange }: ConversationProps) {
 
   const startConversation = useCallback(async () => {
     logClient('startConversation: Initiated.');
-    if (isRubricLoading || !defaultRubricId.current || !defaultRubricName.current) {
+    
+    // If using deferred start (sessionId provided), skip rubric loading
+    if (!providedSessionId && (isRubricLoading || !defaultRubricId.current || !defaultRubricName.current)) {
       alert("Rubric information is still loading or failed to load. Please wait a moment and try again, or refresh the page.");
       return;
     }
+    
     try {
       setIsLoading(true);
       setIsEndingSession(false);
       setElapsedTime(0);
       setTranscripts([]);
       setSessionId('');
-      sessionIdRef.current = '';
+      
+      // IMPORTANT: Set sessionIdRef BEFORE starting ElevenLabs session
+      // so transcripts can be saved immediately when messages start coming
+      if (providedSessionId) {
+        sessionIdRef.current = providedSessionId; // Set this early for transcript saving
+        console.log('Set sessionId for transcript tracking BEFORE ElevenLabs start:', providedSessionId);
+      } else {
+        sessionIdRef.current = ''; // Will be set to ElevenLabs ID in legacy mode
+      }
 
       await navigator.mediaDevices.getUserMedia({ audio: true });
       const signedUrl = await getSignedUrl();
@@ -239,27 +262,40 @@ export function Conversation({ onInterviewActiveChange }: ConversationProps) {
       }
       
       console.log('ElevenLabs session successfully started. ELI Conversation ID:', extractedEliConversationId);
-      setSessionId(extractedEliConversationId);
-
-      // Record session metadata in our DB using the ELI conversation_id
-      try {
-        const metaResponse = await fetch('/api/sessions/start', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sessionId: extractedEliConversationId, 
-            rubricId: defaultRubricId.current,
-            rubricName: defaultRubricName.current,
-            interviewType: defaultRubricName.current 
-          }),
-        });
-        if (metaResponse.ok) {
-          console.log('Session metadata saved using ELI ID:', await metaResponse.json());
-        } else {
-          console.error('Failed to save session metadata:', await metaResponse.text());
+      
+      // Handle different session modes
+      if (providedSessionId) {
+        // Deferred start mode: sessionIdRef already set above, DON'T update sessionId state
+        // to avoid the useEffect overwriting sessionIdRef.current
+        console.log('Deferred mode: Keeping sessionIdRef set to internal UUID:', sessionIdRef.current);
+        
+        // Call the mapping callback if provided
+        if (onElevenLabsIdReceived) {
+          await onElevenLabsIdReceived(extractedEliConversationId);
         }
-      } catch (err) {
-        console.error('Error saving session metadata:', err);
+      } else {
+        // Legacy mode: Set sessionId state AND sessionIdRef to ElevenLabs ID
+        setSessionId(extractedEliConversationId);
+        sessionIdRef.current = extractedEliConversationId; // Set for transcript saving in legacy mode
+        try {
+          const metaResponse = await fetch('/api/sessions/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              sessionId: extractedEliConversationId, 
+              rubricId: defaultRubricId.current,
+              rubricName: defaultRubricName.current,
+              interviewType: defaultRubricName.current 
+            }),
+          });
+          if (metaResponse.ok) {
+            console.log('Session metadata saved using ELI ID:', await metaResponse.json());
+          } else {
+            console.error('Failed to save session metadata:', await metaResponse.text());
+          }
+        } catch (err) {
+          console.error('Error saving session metadata:', err);
+        }
       }
 
     } catch (error) {
@@ -268,7 +304,7 @@ export function Conversation({ onInterviewActiveChange }: ConversationProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [conversation, defaultRubricId, defaultRubricName, isRubricLoading]);
+  }, [conversation, defaultRubricId, defaultRubricName, isRubricLoading, providedSessionId, onElevenLabsIdReceived]);
 
   const stopConversation = useCallback(async () => {
     logClient('stopConversation: Initiated.');
@@ -291,9 +327,11 @@ export function Conversation({ onInterviewActiveChange }: ConversationProps) {
     } catch (error: any) {
       logger.error({ event: 'ElevenLabsEndSessionError', details: { sessionId: currentSessionId }, error: error });
     } finally {
-      router.push(`/processing/${currentSessionId}`);
+      // Use provided sessionId if available, otherwise use the current sessionId
+      const sessionIdForRouting = providedSessionId || currentSessionId;
+      router.push(`/processing/${sessionIdForRouting}`);
     }
-  }, [conversation, router, onInterviewActiveChange]);
+  }, [conversation, router, onInterviewActiveChange, providedSessionId]);
 
   // Initial state check - if conversation status is not connected, it's not active.
   useEffect(() => {
@@ -310,30 +348,32 @@ export function Conversation({ onInterviewActiveChange }: ConversationProps) {
 
   return (
     <div className="flex flex-col items-center gap-4 w-full conversation-container pt-2 pb-6 px-6">
-      <div className="flex gap-2 justify-center h-20 relative">
+      <div className="flex flex-col items-center justify-center h-auto relative">
         <AnimatePresence mode='wait' initial={false}>
           {conversation.status !== 'connected' && !isLoading && !isEndingSession && (
-            <motion.button
-              key="start-interview"
-              variants={buttonVariants}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-              onClick={startConversation}
-              disabled={isRubricLoading}
-              className="p-5 bg-gray-100 rounded-full hover:bg-gray-200 disabled:opacity-50 transition-colors flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
-              aria-label="Start your interview (voice only)"
-              title="Start your interview (voice only)"
-            >
-              {isRubricLoading ? (
-                <svg className="animate-spin h-8 w-8 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-              ) : (
-                <SoundWaveIcon className="w-20 h-12 fill-indigo-600 hover:fill-indigo-700" />
-              )}
-            </motion.button>
+            <div className="flex flex-col items-center">
+              <motion.button
+                key="start-interview"
+                variants={buttonVariants}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                onClick={startConversation}
+                disabled={isRubricLoading}
+                className="p-5 bg-gray-100 rounded-full hover:bg-gray-200 disabled:opacity-50 transition-colors flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+                aria-label="Start your interview (voice only)"
+                title="Start your interview (voice only)"
+              >
+                {isRubricLoading ? (
+                  <svg className="animate-spin h-8 w-8 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                ) : (
+                  <SoundWaveIcon className="w-20 h-12 fill-indigo-600 hover:fill-indigo-700" />
+                )}
+              </motion.button>
+            </div>
           )}
 
           {isLoading && (
@@ -357,22 +397,30 @@ export function Conversation({ onInterviewActiveChange }: ConversationProps) {
 
           {conversation.status === 'connected' && !isLoading && !isEndingSession && (
             <div className="flex flex-col items-center my-4 gap-y-3">
+              {/* AI Interviewer Indicator */}
+              <div className="relative flex items-center justify-center mb-2">
+                <div className="w-32 h-32 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full flex items-center justify-center relative">
+                  {/* Pulsing rings - only show when speaking */}
+                  {conversation.isSpeaking && (
+                    <>
+                      <div className="absolute w-full h-full rounded-full border-2 border-purple-400/40 animate-ping"></div>
+                      <div className="absolute w-40 h-40 rounded-full border-2 border-purple-400/20 animate-ping" style={{ animationDelay: '0.5s' }}></div>
+                      <div className="absolute w-48 h-48 rounded-full border border-purple-400/10 animate-ping" style={{ animationDelay: '1s' }}></div>
+                    </>
+                  )}
+                </div>
+              </div>
+
               <div className="flex items-center gap-2 justify-center h-6">
                 {conversation.isSpeaking && (
-                  <div className={`px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium flex items-center gap-1 ${isTimerRunning ? 'timer-active-glow' : ''}`}>
-                    <span className="flex h-2 w-2 relative">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                    </span>
+                  <div className="text-green-800 text-sm font-medium flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-green-500"></span>
                     Speaking
                   </div>
                 )}
                 {!conversation.isSpeaking && (
-                  <div className={`px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium flex items-center gap-1 ${isTimerRunning ? 'timer-active-glow' : ''}`}>
-                    <span className="flex h-2 w-2 relative">
-                      <span className="absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-                    </span>
+                  <div className="text-blue-800 text-sm font-medium flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-blue-500"></span>
                     Listening
                   </div>
                 )}

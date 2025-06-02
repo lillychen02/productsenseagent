@@ -1,0 +1,64 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+## ✅ GOAL
+Generate a structured list of atomic, actionable, and testable engineering tasks from a technical plan or small product requirements document (PRD). These tasks should be clear enough for a junior developer to execute independently.
+
+---
+
+## 📦 OUTPUT
+- **Format:** Markdown (`.md`)
+- **Location:** `/tasks/`
+- **Filename:** `tasks-[feature].md` (e.g., `tasks-feedback-chat.md`)
+
+---
+
+## 🧩 TASK STRUCTURE
+
+Use 3-level markdown checkboxes:
+- [ ] Task
+  - [ ] Subtask
+    - [ ] Sub-subtask
+
+Example:
+- [ ] Build results page
+  - [ ] Design scorecard component
+    - [ ] Add color-coded rubric ring
+
+---
+
+## 🔁 TASK GENERATION PROCESS
+
+### 1. Receive Input
+User provides a tech plan, PRD, or feature idea. Use `@include` to bring in the source file.
+
+### 2. Phase 1: Generate High-Level Tasks
+Review the document and propose 3–5 top-level tasks that represent major milestones or components. Do **not** generate subtasks yet.
+
+> Respond to the user:  
+> “I’ve generated the high-level tasks. Ready to expand into subtasks?”  
+> Wait for an explicit “Go” or “Let’s proceed.”
+
+### 3. Phase 2: Expand into Subtasks
+After user confirmation:
+- Break each high-level task into logical, actionable subtasks.
+- Include sub-subtasks where needed to capture fine-grained detail.
+- Ensure tasks follow the structure and reflect the architecture in the plan.
+
+### 4. Optional: List Relevant Files
+At the bottom, include a **Relevant Files** section that lists files that need to be created or modified, based on the plan.
+
+---
+
+## ✅ GOOD TASKS ARE:
+- **Atomic** — A single unit of work
+- **Actionable** — Clear what needs to be done
+- **Testable** — Has a clear definition of done
+
+---
+
+## 💾 SAVE INSTRUCTIONS
+Save the final output as a markdown file in `/tasks/` with the filename format:  
+`tasks-[feature].md`

@@ -3,11 +3,10 @@
 import { useParams } from 'next/navigation';
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
+import { Mic } from 'lucide-react';
 import { ChatBubbleIcon } from './ChatBubbleIcon';
 import { AskLoopieSidebar } from './AskLoopieSidebar';
 import { motion, AnimatePresence } from 'framer-motion';
-import InlineEmailForm from '../../components/InlineEmailForm';
-import { type InterviewData as EmailReportData } from '../../../lib/types/email'; // Updated import path
 
 // Minimal interfaces for data fetched - align with api/results/[sessionId]/route.ts
 interface ScoreItem {
@@ -111,8 +110,6 @@ export default function ResultsPage() {
   const [initialLoopieMessage, setInitialLoopieMessage] = useState<string | undefined>(undefined);
   const feedbackContentRef = useRef<HTMLDivElement>(null);
   const elaborateButtonRef = useRef<HTMLButtonElement>(null);
-  const emailFormRef = useRef<HTMLDivElement>(null);
-  const [isSubmittingEmail, setIsSubmittingEmail] = useState(false); // For loading state on email form
 
   useEffect(() => {
     if (sessionId) {
@@ -137,62 +134,6 @@ export default function ResultsPage() {
       fetchResults();
     }
   }, [sessionId]);
-
-  const handleEmailSubmit = async (email: string) => {
-    if (!resultData || !resultData.scoreData) {
-      console.error("handleEmailSubmit: No resultData available to send.");
-      throw new Error("Interview results are not loaded yet. Please wait and try again.");
-    }
-    if (isSubmittingEmail) return;
-
-    setIsSubmittingEmail(true);
-
-    const reportDataForEmail: EmailReportData = {
-      recommendation: resultData.scoreData.llmResponse?.overall_recommendation || 'N/A',
-      date: new Date(resultData.scoreData.scoredAt).toLocaleDateString(),
-      interviewType: resultData.scoreData.rubricName || 'General Interview',
-      skills: resultData.scoreData.llmResponse?.scores?.map(skill => ({
-        name: skill.dimension,
-        score: skill.score,
-        emoji: getScoreEmoji(skill.score),
-        feedback: { // Populate the detailed feedback
-          strengths: skill.feedback?.strengths || [],
-          weaknesses: skill.feedback?.weaknesses || [],
-          exemplar_response_suggestion: skill.feedback?.exemplar_response_suggestion
-        }
-      })) || [],
-      summary: resultData.scoreData.llmResponse?.summary_feedback || 'No summary provided.',
-      sessionLink: `${process.env.NEXT_PUBLIC_APP_URL || 'https://askloopie.com'}/results/${sessionId}`,
-    };
-
-    try {
-      const response = await fetch('/api/send-results', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: email, 
-          userName: undefined, // Or pass actual userName if available and desired
-          interviewReportData: reportDataForEmail,
-          sessionId: sessionId // Add sessionId to the payload
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: "Failed to send email. Please try again." }));
-        throw new Error(errorData.message || `API Error: ${response.status}`);
-      }
-      
-      console.log("Email results API call successful");
-
-    } catch (error: any) {
-      console.error("Failed to send email results:", error);
-      throw error; 
-    } finally {
-      setIsSubmittingEmail(false);
-    }
-  };
 
   const handleDownloadTranscript = () => {
     if (resultData?.transcriptText) {
@@ -277,15 +218,6 @@ export default function ResultsPage() {
     if (selectedText && selection && selection.rangeCount > 0) {
       const range = selection.getRangeAt(0);
 
-      // Check if the selection is within the email form
-      if (emailFormRef.current && emailFormRef.current.contains(range.commonAncestorContainer)) {
-        // If selection is within email form, ensure the elaborate button is hidden
-        if (selectionAction.visible) {
-            setSelectionAction({ visible: false, selectedText: '', top: 0, left: 0, width: 0 });
-        }
-        return; // Don't show elaborate button for email form text
-      }
-
       const rect = range.getBoundingClientRect();
       let newTop = rect.bottom + window.scrollY + 8;
       let newLeft = rect.left + window.scrollX + (rect.width / 2);
@@ -344,31 +276,70 @@ export default function ResultsPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <p className="text-lg text-gray-600">Loading results...</p>
+      <div className="min-h-screen bg-white">
+        {/* Header */}
+        <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
+          <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+            <Link href="/" className="flex items-center space-x-2">
+              <div className="w-8 h-8 bg-gradient-to-r from-purple-600 to-pink-600 rounded-xl flex items-center justify-center">
+                <Mic className="w-5 h-5 text-white" />
+              </div>
+              <span className="text-xl font-bold text-gray-900">Loopie AI</span>
+            </Link>
+          </div>
+        </header>
+        <div className="flex items-center justify-center min-h-[calc(100vh-73px)]">
+          <p className="text-lg text-gray-600">Loading results...</p>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-white p-4 text-center">
-        <p className="text-xl font-semibold text-red-600 mb-2">Error Loading Results</p>
-        <p className="text-gray-700 mb-6">{error}</p>
-        <Link href="/" className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition">
-          Back to Interview Page
-        </Link>
+      <div className="min-h-screen bg-white">
+        {/* Header */}
+        <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
+          <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+            <Link href="/" className="flex items-center space-x-2">
+              <div className="w-8 h-8 bg-gradient-to-r from-purple-600 to-pink-600 rounded-xl flex items-center justify-center">
+                <Mic className="w-5 h-5 text-white" />
+              </div>
+              <span className="text-xl font-bold text-gray-900">Loopie AI</span>
+            </Link>
+          </div>
+        </header>
+        <div className="flex flex-col items-center justify-center min-h-[calc(100vh-73px)] p-4 text-center">
+          <p className="text-xl font-semibold text-red-600 mb-2">Error Loading Results</p>
+          <p className="text-gray-700 mb-6">{error}</p>
+          <Link href="/" className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition">
+            Back to Interview Page
+          </Link>
+        </div>
       </div>
     );
   }
 
   if (!resultData || !resultData.scoreData) {
     return (
-       <div className="min-h-screen flex flex-col items-center justify-center bg-white p-4 text-center">
-        <p className="text-xl font-semibold text-gray-700 mb-6">No results found for this session.</p>
-        <Link href="/" className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition">
-          Back to Interview Page
-        </Link>
+      <div className="min-h-screen bg-white">
+        {/* Header */}
+        <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
+          <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+            <Link href="/" className="flex items-center space-x-2">
+              <div className="w-8 h-8 bg-gradient-to-r from-purple-600 to-pink-600 rounded-xl flex items-center justify-center">
+                <Mic className="w-5 h-5 text-white" />
+              </div>
+              <span className="text-xl font-bold text-gray-900">Loopie AI</span>
+            </Link>
+          </div>
+        </header>
+        <div className="flex flex-col items-center justify-center min-h-[calc(100vh-73px)] p-4 text-center">
+          <p className="text-xl font-semibold text-gray-700 mb-6">No results found for this session.</p>
+          <Link href="/" className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition">
+            Back to Interview Page
+          </Link>
+        </div>
       </div>
     );
   }
@@ -381,122 +352,134 @@ export default function ResultsPage() {
   // const SIDEBAR_WIDTH_PX = 512; // Approximate pixel value if needed
 
   return (
-    <div className={`min-h-screen bg-white font-sans transition-all duration-300 ease-in-out ${isSidebarOpen ? SIDEBAR_WIDTH_CLASS : 'mr-0'} pb-24`}>
-      <div ref={feedbackContentRef} onMouseUp={handleTextMouseUp} className="w-full px-4 sm:px-6 mx-auto pb-24">
-        <main className={`max-w-3xl ${isSidebarOpen ? 'mr-0' : 'mx-auto'} bg-white pt-2 sm:pt-4 pb-8 sm:pb-10`}>
-          <header className="mb-4 pb-6 border-b border-gray-200 text-left">
-            <h1 className="text-3xl font-bold text-gray-800 mb-3 leading-relaxed">
-              {motivationalHeaderDetails.emoji && <span className="mr-2">{motivationalHeaderDetails.emoji}</span>}
-              {motivationalHeaderDetails.text}
-            </h1>
-            <div className="text-sm text-gray-500 space-y-0.5 mt-2 mb-3 leading-relaxed">
-              <p>Date: <span className="font-normal text-gray-600">{new Date(scoreData.scoredAt).toLocaleDateString()}</span></p>
+    <div className="min-h-screen bg-white">
+      {/* Header */}
+      <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+          <Link href="/" className="flex items-center space-x-2">
+            <div className="w-8 h-8 bg-gradient-to-r from-purple-600 to-pink-600 rounded-xl flex items-center justify-center">
+              <Mic className="w-5 h-5 text-white" />
             </div>
-            {scoreData.llmResponse?.summary_feedback && (
-              <p className="text-base text-gray-600 leading-relaxed mt-3">
-                {scoreData.llmResponse.summary_feedback}
-              </p>
-            )}
-          </header>
+            <span className="text-xl font-bold text-gray-900">Loopie AI</span>
+          </Link>
+        </div>
+      </header>
 
-          {sessionId && <InlineEmailForm ref={emailFormRef} onSubmit={handleEmailSubmit} sessionId={sessionId} />}
+      <div className={`font-sans transition-all duration-300 ease-in-out ${isSidebarOpen ? SIDEBAR_WIDTH_CLASS : 'mr-0'} pb-24`}>
+        <div ref={feedbackContentRef} onMouseUp={handleTextMouseUp} className="w-full px-4 sm:px-6 mx-auto pb-24">
+          <main className={`max-w-3xl ${isSidebarOpen ? 'mr-0' : 'mx-auto'} bg-white pt-2 sm:pt-4 pb-8 sm:pb-10`}>
+            <header className="mb-4 pb-6 border-b border-gray-200 text-left">
+              <h1 className="text-3xl font-bold text-gray-800 mb-3 leading-relaxed">
+                {motivationalHeaderDetails.emoji && <span className="mr-2">{motivationalHeaderDetails.emoji}</span>}
+                {motivationalHeaderDetails.text}
+              </h1>
+              <div className="text-sm text-gray-500 space-y-0.5 mt-2 mb-3 leading-relaxed">
+                <p>Date: <span className="font-normal text-gray-600">{new Date(scoreData.scoredAt).toLocaleDateString()}</span></p>
+              </div>
+              {scoreData.llmResponse?.summary_feedback && (
+                <p className="text-base text-gray-600 leading-relaxed mt-3">
+                  {scoreData.llmResponse.summary_feedback}
+                </p>
+              )}
+            </header>
 
-          {scoreData.llmResponse?.scores && scoreData.llmResponse.scores.length > 0 && (
-            <section className="mb-8 text-left">
-              <h2 className="text-2xl font-bold text-indigo-600 mb-4 leading-relaxed">Your Skills at a Glance</h2>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-3/5">
-                        Skill
-                      </th>
-                      <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-2/5">
-                        Score
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {scoreData.llmResponse.scores.map((item: ScoreItem, index: number) => (
-                      <tr key={`snapshot-${index}`} className={'bg-transparent'}>
-                        <td className="px-4 py-2 text-sm font-medium text-gray-900 w-3/5">
-                          <a 
-                            href={`#${generateSkillId(item.dimension)}`} 
-                            className="text-blue-600 hover:text-blue-800 hover:underline"
-                          >
-                            {item.dimension}
-                          </a>
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-700 w-2/5">
-                          <span className="mr-1.5">{getScoreEmoji(item.score)}</span>
-                          {item.score !== null ? `${item.score}/4` : 'N/A'}
-                        </td>
+            {scoreData.llmResponse?.scores && scoreData.llmResponse.scores.length > 0 && (
+              <section className="mb-8 text-left">
+                <h2 className="text-2xl font-bold text-indigo-600 mb-4 leading-relaxed">Your Skills at a Glance</h2>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-3/5">
+                          Skill
+                        </th>
+                        <th scope="col" className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-2/5">
+                          Score
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {scoreData.llmResponse.scores.map((item: ScoreItem, index: number) => (
+                        <tr key={`snapshot-${index}`} className={'bg-transparent'}>
+                          <td className="px-4 py-2 text-sm font-medium text-gray-900 w-3/5">
+                            <a 
+                              href={`#${generateSkillId(item.dimension)}`} 
+                              className="text-blue-600 hover:text-blue-800 hover:underline"
+                            >
+                              {item.dimension}
+                            </a>
+                          </td>
+                          <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-700 w-2/5">
+                            <span className="mr-1.5">{getScoreEmoji(item.score)}</span>
+                            {item.score !== null ? `${item.score}/4` : 'N/A'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+
+            <hr className="my-8 border-gray-300"/>
+
+            <section className="mb-10 text-left">
+              <h2 className="text-2xl font-bold text-indigo-600 mb-6 leading-relaxed">Deep Dive By Skills</h2>
+              <div className="space-y-8">
+                {scoreData.llmResponse?.scores?.map((item: ScoreItem, index: number) => (
+                  <div key={index} id={generateSkillId(item.dimension)} className="scroll-mt-20">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-3 leading-relaxed">
+                      {item.dimension}
+                      <span className="ml-2">
+                        {getScoreEmoji(item.score)}
+                      </span>
+                      <span className="text-base font-normal text-gray-600 ml-1">
+                        {item.score !== null ? `${item.score}/4` : 'N/A'}
+                      </span>
+                    </h3>
+                    
+                    {item.feedback?.strengths && item.feedback.strengths.length > 0 && item.feedback.strengths[0] !== "Not reached." && (
+                      <div className="mt-2 mb-3">
+                        <h4 className="text-md font-semibold text-gray-700 mb-1 leading-relaxed"><span className="mr-1.5">✅</span>What You Did Well</h4>
+                        <ul className="list-disc list-outside text-gray-600 space-y-1">
+                          {item.feedback.strengths.map((strength, sIdx) => (
+                            <li key={`s-${index}-${sIdx}`} className="ml-8 text-base leading-relaxed">{strength}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {item.feedback?.weaknesses && item.feedback.weaknesses.length > 0 && item.feedback.weaknesses[0] !== "Not reached." && (
+                      <div className="mt-2 mb-3">
+                        <h4 className="text-md font-semibold text-gray-700 mb-1 leading-relaxed"><span className="mr-1.5">❌</span>What Could Be Stronger</h4>
+                        <ul className="list-disc list-outside text-gray-600 space-y-1">
+                          {item.feedback.weaknesses.map((weakness, wIdx) => (
+                            <li key={`w-${index}-${wIdx}`} className="ml-8 text-base leading-relaxed">{weakness}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {item.score !== null && item.score < 4 && item.feedback?.exemplar_response_suggestion && (
+                      <div className="mt-3 pt-3 border-t border-dashed border-gray-300">
+                        <h4 className="text-md font-semibold text-gray-700 mb-1 leading-relaxed"><span className="mr-1.5">💡</span>Try This Next Time</h4>
+                        <p className="text-sm text-gray-600 italic ml-7 leading-relaxed">{item.feedback.exemplar_response_suggestion}</p>
+                      </div>
+                    )}
+
+                    {(item.feedback?.strengths?.[0] === "Not reached." || item.feedback?.weaknesses?.[0] === "Not reached.") && (
+                       <p className="text-gray-500 italic mt-2">Not reached.</p>
+                    )}
+                    {index < (scoreData.llmResponse.scores.length -1) &&  <hr className="mt-4 border-gray-200"/>}
+                  </div>
+                ))}
+                {(!scoreData.llmResponse?.scores || scoreData.llmResponse.scores.length === 0) && (
+                  <p className="text-gray-500 italic">No detailed dimension scores available.</p>
+                )}
               </div>
             </section>
-          )}
-
-          <hr className="my-8 border-gray-300"/>
-
-          <section className="mb-10 text-left">
-            <h2 className="text-2xl font-bold text-indigo-600 mb-6 leading-relaxed">Deep Dive By Skills</h2>
-            <div className="space-y-8">
-              {scoreData.llmResponse?.scores?.map((item: ScoreItem, index: number) => (
-                <div key={index} id={generateSkillId(item.dimension)} className="scroll-mt-20">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-3 leading-relaxed">
-                    {item.dimension}
-                    <span className="ml-2">
-                      {getScoreEmoji(item.score)}
-                    </span>
-                    <span className="text-base font-normal text-gray-600 ml-1">
-                      {item.score !== null ? `${item.score}/4` : 'N/A'}
-                    </span>
-                  </h3>
-                  
-                  {item.feedback?.strengths && item.feedback.strengths.length > 0 && item.feedback.strengths[0] !== "Not reached." && (
-                    <div className="mt-2 mb-3">
-                      <h4 className="text-md font-semibold text-gray-700 mb-1 leading-relaxed"><span className="mr-1.5">✅</span>What You Did Well</h4>
-                      <ul className="list-disc list-outside text-gray-600 space-y-1">
-                        {item.feedback.strengths.map((strength, sIdx) => (
-                          <li key={`s-${index}-${sIdx}`} className="ml-8 text-base leading-relaxed">{strength}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {item.feedback?.weaknesses && item.feedback.weaknesses.length > 0 && item.feedback.weaknesses[0] !== "Not reached." && (
-                    <div className="mt-2 mb-3">
-                      <h4 className="text-md font-semibold text-gray-700 mb-1 leading-relaxed"><span className="mr-1.5">❌</span>What Could Be Stronger</h4>
-                      <ul className="list-disc list-outside text-gray-600 space-y-1">
-                        {item.feedback.weaknesses.map((weakness, wIdx) => (
-                          <li key={`w-${index}-${wIdx}`} className="ml-8 text-base leading-relaxed">{weakness}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {item.score !== null && item.score < 4 && item.feedback?.exemplar_response_suggestion && (
-                    <div className="mt-3 pt-3 border-t border-dashed border-gray-300">
-                      <h4 className="text-md font-semibold text-gray-700 mb-1 leading-relaxed"><span className="mr-1.5">💡</span>Try This Next Time</h4>
-                      <p className="text-sm text-gray-600 italic ml-7 leading-relaxed">{item.feedback.exemplar_response_suggestion}</p>
-                    </div>
-                  )}
-
-                  {(item.feedback?.strengths?.[0] === "Not reached." || item.feedback?.weaknesses?.[0] === "Not reached.") && (
-                     <p className="text-gray-500 italic mt-2">Not reached.</p>
-                  )}
-                  {index < (scoreData.llmResponse.scores.length -1) &&  <hr className="mt-4 border-gray-200"/>}
-                </div>
-              ))}
-              {(!scoreData.llmResponse?.scores || scoreData.llmResponse.scores.length === 0) && (
-                <p className="text-gray-500 italic">No detailed dimension scores available.</p>
-              )}
-            </div>
-          </section>
-        </main>
+          </main>
+        </div>
       </div>
 
       <AnimatePresence>
@@ -523,20 +506,20 @@ export default function ResultsPage() {
 
       <footer className="fixed bottom-0 left-0 right-0 z-40 bg-transparent pb-4 pt-2">
         <div className="flex justify-center">
-          <div className="inline-flex items-center justify-center gap-x-3 bg-indigo-600 rounded-full p-2 shadow-lg">
+          <div className="inline-flex items-center justify-center gap-x-3 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full p-2 shadow-lg">
             <button
               onClick={() => setIsTranscriptModalOpen(true)}
               disabled={!transcriptText}
               title="View Transcript"
               aria-label="View Transcript"
-              className="p-2 text-white hover:bg-indigo-700 rounded-full disabled:opacity-50 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:ring-offset-2 focus:ring-offset-indigo-600"
+              className="p-2 text-white hover:bg-white/20 rounded-full disabled:opacity-50 transition-colors focus:outline-none focus:ring-2 focus:ring-white/30 focus:ring-offset-2 focus:ring-offset-transparent"
             >
               <DocumentIcon className="w-5 h-5" fill="currentColor" />
             </button>
 
             <ChatBubbleIcon 
               onClick={() => setIsSidebarOpen(true)}
-              className="p-2 text-white hover:bg-indigo-700 rounded-full disabled:opacity-50 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:ring-offset-2 focus:ring-offset-indigo-600 flex items-center justify-center"
+              className="p-2 text-white hover:bg-white/20 rounded-full disabled:opacity-50 transition-colors focus:outline-none focus:ring-2 focus:ring-white/30 focus:ring-offset-2 focus:ring-offset-transparent flex items-center justify-center"
               title="Ask Loopie"
               ariaLabel="Ask Loopie"
             />
@@ -545,7 +528,7 @@ export default function ResultsPage() {
               href="/"
               title="Start New Interview"
               aria-label="Start New Interview"
-              className="p-2 text-white hover:bg-indigo-700 rounded-full disabled:opacity-50 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:ring-offset-2 focus:ring-offset-indigo-600 flex items-center justify-center"
+              className="p-2 text-white hover:bg-white/20 rounded-full disabled:opacity-50 transition-colors focus:outline-none focus:ring-2 focus:ring-white/30 focus:ring-offset-2 focus:ring-offset-transparent flex items-center justify-center"
             >
               <RetryIcon className="w-5 h-5" fill="currentColor" />
             </Link>
