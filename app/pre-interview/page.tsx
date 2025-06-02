@@ -61,17 +61,15 @@ export default function PreInterviewPage() {
       </header>
 
       {/* Breadcrumb Navigation */}
-      <div className="container mx-auto px-4 py-3">
-        <nav className="text-sm text-gray-600">
+      <div className="container mx-auto px-4 py-20 max-w-2xl">
+        <nav className="text-sm text-gray-600 mb-8">
           <Link href="/interview-selection" className="text-blue-600 hover:text-blue-800 hover:underline">
             Meetings
           </Link>
           <span className="mx-2">→</span>
           <span className="text-gray-500">Product Sense Interview</span>
         </nav>
-      </div>
 
-      <div className="container mx-auto px-4 py-12 max-w-2xl">
         {/* Above the Fold - Email Collection */}
         <div className="text-center mb-8">
           <div className="w-12 h-12 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -79,7 +77,7 @@ export default function PreInterviewPage() {
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-4">Product Sense</h1>
           <p className="text-lg text-gray-600 mb-4">
-            Enter your email to receive your personalized results and feedback after the interview.
+            Let's see how you think. This is a mock interview that challenges your product instincts — and gives you feedback that actually makes you better.
           </p>
         </div>
 
@@ -89,7 +87,7 @@ export default function PreInterviewPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email" className="text-base font-medium">
-                  Email address
+                  Where should we send your results?
                 </Label>
                 {/* Combined Input and Button Container */}
                 <div className="flex bg-white border border-gray-300 rounded-xl overflow-hidden shadow-sm focus-within:ring-2 focus-within:ring-purple-500 focus-within:border-transparent">
@@ -144,7 +142,16 @@ export default function PreInterviewPage() {
         <div className="space-y-8">
           <div className="text-center">
             <h2 className="text-2xl font-bold text-gray-900 mb-4">About This Interview</h2>
-            <p className="text-gray-600">You will be given an ambiguous prompt and asked to lead the discussion and craft a solution.<br /><br />You will be evaluated on your ability to frame an ambiguous problem, segment users in a market, think clearly about tradeoffs, prioritize effectively and scope an MVP.</p>
+            <div className="text-gray-600 text-left max-w-lg mx-auto">
+              <p className="mb-4">This isn&apos;t a quiz. You&apos;ll be given a messy, real-world problem — then it&apos;s up to you to lead. We&apos;ll evaluate how you:</p>
+              <ul className="list-disc list-inside space-y-2 mb-4">
+                <li>Frame an ambiguous prompt</li>
+                <li>Identify and segment users</li>
+                <li>Prioritize tradeoffs</li>
+                <li>Scope a strong MVP</li>
+              </ul>
+              <p>Expect to get challenged. Expect to improve. Talk as if you would in a real world interview.</p>
+            </div>
           </div>
         </div>
       </div>

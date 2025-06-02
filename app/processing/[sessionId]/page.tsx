@@ -137,8 +137,8 @@ export default function ProcessingPage() {
             </div>
           </div>
         </header>
-        <div className="min-h-screen flex flex-col items-center justify-center p-4 text-center">
-          <div className="p-8 bg-transparent rounded-lg max-w-2xl w-full">
+        <div className="container mx-auto px-4 py-20 max-w-2xl">
+          <div className="text-center">
             <h1 className="text-2xl font-bold text-red-600 mb-4">Processing Error</h1>
             <p className="text-gray-700 mb-6">{errorMessage}</p>
             <button 
@@ -166,8 +166,9 @@ export default function ProcessingPage() {
           </div>
         </div>
       </header>
-      <div className="min-h-screen flex flex-col items-center justify-center p-4 text-center">
-        <div className="p-10 bg-transparent rounded-lg max-w-2xl w-full">
+      
+      <div className="container mx-auto px-4 py-20 max-w-2xl">
+        <div className="text-center">
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-3">
             We&apos;re preparing your feedback...
           </h1>

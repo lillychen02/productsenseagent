@@ -4,12 +4,14 @@ import { useParams } from 'next/navigation';
 import { useEffect, useState, useCallback } from 'react';
 import { Conversation } from '../../components/conversation';
 import { Mic } from 'lucide-react';
+import Link from 'next/link';
 
 export default function InterviewPage() {
   const params = useParams();
   const sessionId = params.sessionId as string;
   const [isSessionMapped, setIsSessionMapped] = useState(false);
   const [mappingError, setMappingError] = useState<string | null>(null);
+  const [isInterviewActive, setIsInterviewActive] = useState(false);
 
   // Function to handle ElevenLabs ID mapping
   const handleElevenLabsIdMapping = useCallback(async (elevenlabsConversationId: string) => {
@@ -37,6 +39,11 @@ export default function InterviewPage() {
       // Don't fail the interview, just log the error
     }
   }, [sessionId]);
+
+  const handleInterviewActiveChange = useCallback((isActive: boolean) => {
+    setIsInterviewActive(isActive);
+    console.log('Interview active state changed:', isActive);
+  }, []);
 
   if (!sessionId) {
     return (
@@ -76,13 +83,25 @@ export default function InterviewPage() {
         </div>
       </header>
 
+      {/* Breadcrumb Navigation */}
+      <div className="container mx-auto px-4 py-20 max-w-2xl">
+        <nav className="text-sm text-gray-600">
+          <Link href="/interview-selection" className="text-blue-600 hover:text-blue-800 hover:underline">
+            Meetings
+          </Link>
+          <span className="mx-2">→</span>
+          <Link href="/pre-interview" className="text-blue-600 hover:text-blue-800 hover:underline">
+            Product Sense Interview
+          </Link>
+          <span className="mx-2">→</span>
+          <span className="text-gray-500">Interview in Progress</span>
+        </nav>
+      </div>
+
       <div className="max-w-4xl mx-auto px-4 py-8">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Ready to start?
-          </h1>
           <p className="text-xl text-gray-800 font-medium mb-3">
-            Product Sense Interview
+            {isInterviewActive ? 'Interview In Progress' : 'Click to Start Interview'}
           </p>
         </div>
 
@@ -90,10 +109,7 @@ export default function InterviewPage() {
           <Conversation 
             sessionId={sessionId}
             onElevenLabsIdReceived={handleElevenLabsIdMapping}
-            onInterviewActiveChange={(isActive) => {
-              // You can add additional logic here if needed
-              console.log('Interview active state changed:', isActive);
-            }}
+            onInterviewActiveChange={handleInterviewActiveChange}
           />
         </div>
 

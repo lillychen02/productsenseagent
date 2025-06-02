@@ -373,9 +373,6 @@ export function Conversation({ onInterviewActiveChange, sessionId: providedSessi
                   <SoundWaveIcon className="w-20 h-12 fill-indigo-600 hover:fill-indigo-700" />
                 )}
               </motion.button>
-              {!isRubricLoading && (
-                <p className="mt-3 text-sm text-gray-600 font-medium">Click to start</p>
-              )}
             </div>
           )}
 
@@ -400,22 +397,30 @@ export function Conversation({ onInterviewActiveChange, sessionId: providedSessi
 
           {conversation.status === 'connected' && !isLoading && !isEndingSession && (
             <div className="flex flex-col items-center my-4 gap-y-3">
+              {/* AI Interviewer Indicator */}
+              <div className="relative flex items-center justify-center mb-2">
+                <div className="w-32 h-32 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full flex items-center justify-center relative">
+                  {/* Pulsing rings - only show when speaking */}
+                  {conversation.isSpeaking && (
+                    <>
+                      <div className="absolute w-full h-full rounded-full border-2 border-purple-400/40 animate-ping"></div>
+                      <div className="absolute w-40 h-40 rounded-full border-2 border-purple-400/20 animate-ping" style={{ animationDelay: '0.5s' }}></div>
+                      <div className="absolute w-48 h-48 rounded-full border border-purple-400/10 animate-ping" style={{ animationDelay: '1s' }}></div>
+                    </>
+                  )}
+                </div>
+              </div>
+
               <div className="flex items-center gap-2 justify-center h-6">
                 {conversation.isSpeaking && (
-                  <div className={`px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium flex items-center gap-1 ${isTimerRunning ? 'timer-active-glow' : ''}`}>
-                    <span className="flex h-2 w-2 relative">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                    </span>
+                  <div className="text-green-800 text-sm font-medium flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-green-500"></span>
                     Speaking
                   </div>
                 )}
                 {!conversation.isSpeaking && (
-                  <div className={`px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium flex items-center gap-1 ${isTimerRunning ? 'timer-active-glow' : ''}`}>
-                    <span className="flex h-2 w-2 relative">
-                      <span className="absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-                    </span>
+                  <div className="text-blue-800 text-sm font-medium flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-blue-500"></span>
                     Listening
                   </div>
                 )}
