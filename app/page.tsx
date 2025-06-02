@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { Button } from "./components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./components/ui/card"
 import { Badge } from "./components/ui/badge"
-import { Mic, Users, TrendingUp, CheckCircle, Star, Play, Shield, Zap, Target, ArrowRight } from "lucide-react"
+import { Mic, Users, TrendingUp, CheckCircle, Star, Play, Shield, Zap, Target, ArrowRight, Lightbulb, Scissors } from "lucide-react"
 
 export default function LandingPage() {
   return (
@@ -61,6 +61,93 @@ export default function LandingPage() {
                 <ArrowRight className="w-5 h-5 ml-2" />
               </a>
             </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* What Loopie Gives You Section */}
+      <section className="pt-8 pb-20 px-4 bg-gradient-to-br from-purple-50 to-pink-50">
+        <div className="container mx-auto max-w-6xl">
+          <div className="text-center mb-16">
+            <div className="flex items-center justify-center mb-4">
+              <span className="text-3xl mr-3">✨</span>
+              <h2 className="text-4xl font-bold text-gray-900">
+                What <span className="bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">Loopie</span> gives you after you interview
+              </h2>
+            </div>
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+              These aren't generic tips. You'll get coaching tied to exactly what you said out loud.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-8">
+            {/* MVP Feedback Card */}
+            <Card className="border-2 border-yellow-200 bg-white shadow-lg">
+              <CardHeader className="pb-4">
+                <div className="flex items-center mb-3">
+                  <div className="w-8 h-8 bg-yellow-100 rounded-lg flex items-center justify-center mr-3">
+                    <Lightbulb className="w-5 h-5 text-yellow-600" />
+                  </div>
+                  <CardTitle className="text-xl text-gray-900">MVP Feedback: Over-Explaining the Why</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-2">What you said:</h4>
+                  <blockquote className="bg-gray-50 border-l-4 border-gray-300 pl-4 py-3 italic text-gray-700">
+                    "I think the con is that it doesn't scale too well. But I like that we could get this out there and then see what happens with it and then see how it goes. And we could validate whether this is true or not before we build something more costly."
+                  </blockquote>
+                </div>
+                
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-2">Why it felt unclear:</h4>
+                  <p className="text-gray-700">
+                    You make your point (it doesn't scale, but it's good for validation) and then restate it in several similar ways.
+                  </p>
+                </div>
+
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-2">How you could tighten it:</h4>
+                  <blockquote className="bg-green-50 border-l-4 border-green-400 pl-4 py-3 italic text-green-800">
+                    "The downside is it doesn't scale. But it's perfect for validating demand before we invest in a more complex solution."
+                  </blockquote>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Focused Solutioning Card */}
+            <Card className="border-2 border-orange-200 bg-white shadow-lg">
+              <CardHeader className="pb-4">
+                <div className="flex items-center mb-3">
+                  <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center mr-3">
+                    <Scissors className="w-5 h-5 text-orange-600" />
+                  </div>
+                  <CardTitle className="text-xl text-gray-900">Focused Solutioning</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-2">What you said:</h4>
+                  <blockquote className="bg-gray-50 border-l-4 border-gray-300 pl-4 py-3 italic text-gray-700">
+                    "So I'll brainstorm a few solutions that can help us solve this pain point of what songs, what are the best songs to sing? And then we can do some research on how to make sure that our artists are trending on social media."
+                  </blockquote>
+                </div>
+                
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-2">Why it feels rambling:</h4>
+                  <p className="text-gray-700">
+                    This sentence starts clearly ("I'll brainstorm a few solutions") but then trails into a vague, less focused ending about researching artist trends and songs to sing — which could distract from your next strong point.
+                  </p>
+                </div>
+
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-2">How you could tighten it:</h4>
+                  <blockquote className="bg-blue-50 border-l-4 border-blue-400 pl-4 py-3 italic text-blue-800">
+                    "Let me walk through a few solutions that could help trend-followers discover what's hot in music right now."
+                  </blockquote>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </section>
@@ -218,130 +305,6 @@ export default function LandingPage() {
                 quality.
               </p>
             </div>
-          </div>
-
-          <div className="bg-white rounded-2xl p-8 shadow-lg">
-            <div className="grid md:grid-cols-2 gap-8 items-center">
-              <div>
-                <h3 className="text-2xl font-bold mb-4">Real-time AI Analysis</h3>
-                <p className="text-gray-600 mb-6">
-                  Our AI provides instant feedback on your tone, pace, clarity, and content structure. Track your
-                  improvement over time with detailed analytics.
-                </p>
-                <div className="space-y-4">
-                  <div className="flex items-center">
-                    <Target className="w-5 h-5 text-purple-600 mr-3" />
-                    <span>Speech pattern analysis</span>
-                  </div>
-                  <div className="flex items-center">
-                    <Target className="w-5 h-5 text-purple-600 mr-3" />
-                    <span>Confidence scoring</span>
-                  </div>
-                  <div className="flex items-center">
-                    <Target className="w-5 h-5 text-purple-600 mr-3" />
-                    <span>Content structure feedback</span>
-                  </div>
-                  <div className="flex items-center">
-                    <Target className="w-5 h-5 text-purple-600 mr-3" />
-                    <span>Progress tracking</span>
-                  </div>
-                </div>
-              </div>
-              <div>
-                <img
-                  src="/placeholder.svg?height=300&width=400"
-                  alt="AI Analysis Dashboard"
-                  className="rounded-lg shadow-md"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Social Proof */}
-      <section className="py-20 px-4 bg-white">
-        <div className="container mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-gray-900 mb-4">Trusted by Product Leaders</h2>
-            <p className="text-xl text-gray-600">Join thousands of PMs who've elevated their communication skills</p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8">
-            <Card className="border-0 shadow-lg">
-              <CardContent className="p-6">
-                <div className="flex items-center mb-4">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="w-5 h-5 text-yellow-400 fill-current" />
-                  ))}
-                </div>
-                <p className="text-gray-600 mb-4">
-                  &quot;Loopie AI helped me nail my Series A pitch. The investor Q&amp;A practice was incredibly realistic and
-                  prepared me for every tough question.&quot;
-                </p>
-                <div className="flex items-center">
-                  <img
-                    src="/placeholder.svg?height=40&width=40"
-                    alt="Sarah Chen"
-                    className="w-10 h-10 rounded-full mr-3"
-                  />
-                  <div>
-                    <p className="font-semibold">Sarah Chen</p>
-                    <p className="text-sm text-gray-500">VP Product, TechCorp</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-0 shadow-lg">
-              <CardContent className="p-6">
-                <div className="flex items-center mb-4">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="w-5 h-5 text-yellow-400 fill-current" />
-                  ))}
-                </div>
-                <p className="text-gray-600 mb-4">
-                  &quot;The executive meeting scenarios are spot-on. I went from dreading board meetings to confidently
-                  presenting our quarterly results.&quot;
-                </p>
-                <div className="flex items-center">
-                  <img
-                    src="/placeholder.svg?height=40&width=40"
-                    alt="Michael Rodriguez"
-                    className="w-10 h-10 rounded-full mr-3"
-                  />
-                  <div>
-                    <p className="font-semibold">Michael Rodriguez</p>
-                    <p className="text-sm text-gray-500">Senior PM, StartupXYZ</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-0 shadow-lg">
-              <CardContent className="p-6">
-                <div className="flex items-center mb-4">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="w-5 h-5 text-yellow-400 fill-current" />
-                  ))}
-                </div>
-                <p className="text-gray-600 mb-4">
-                  &quot;Landed my dream PM role after practicing with Loopie AI. The mock interviews were more challenging
-                  than the real thing!&quot;
-                </p>
-                <div className="flex items-center">
-                  <img
-                    src="/placeholder.svg?height=40&width=40"
-                    alt="Emily Johnson"
-                    className="w-10 h-10 rounded-full mr-3"
-                  />
-                  <div>
-                    <p className="font-semibold">Emily Johnson</p>
-                    <p className="text-sm text-gray-500">Product Manager, BigTech</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
           </div>
         </div>
       </section>
