@@ -94,8 +94,8 @@ export default function PreInterviewPage() {
                   <Input 
                     id="email" 
                     type="email" 
-                    placeholder="you@example.com" 
-                    className="flex-1 h-12 text-base border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0" 
+                    placeholder="Enter your email" 
+                    className="flex-1 h-12 text-base border-0 rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-gray-500" 
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required 

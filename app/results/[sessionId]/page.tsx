@@ -53,10 +53,10 @@ const DocumentIcon = ({ className = "w-5 h-5", fill = "currentColor" }: { classN
   </svg>
 );
 
-// Download Icon SVG component
-const DownloadIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+// Copy Icon SVG component
+const CopyIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
   </svg>
 );
 
@@ -108,6 +108,7 @@ export default function ResultsPage() {
     width: 0
   });
   const [initialLoopieMessage, setInitialLoopieMessage] = useState<string | undefined>(undefined);
+  const [isCopySuccess, setIsCopySuccess] = useState<boolean>(false);
   const feedbackContentRef = useRef<HTMLDivElement>(null);
   const elaborateButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -135,17 +136,24 @@ export default function ResultsPage() {
     }
   }, [sessionId]);
 
-  const handleDownloadTranscript = () => {
+  const handleCopyTranscript = async () => {
     if (resultData?.transcriptText) {
-      const blob = new Blob([resultData.transcriptText], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `transcript-${sessionId}.txt`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      try {
+        await navigator.clipboard.writeText(resultData.transcriptText);
+        setIsCopySuccess(true);
+        setTimeout(() => setIsCopySuccess(false), 2000); // Hide success message after 2 seconds
+      } catch (err) {
+        console.error('Failed to copy transcript:', err);
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = resultData.transcriptText;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        setIsCopySuccess(true);
+        setTimeout(() => setIsCopySuccess(false), 2000); // Hide success message after 2 seconds
+      }
     }
   };
 
@@ -556,13 +564,18 @@ export default function ResultsPage() {
             </div>
             <div className="p-4 border-t border-gray-200 flex justify-between items-center">
               <button
-                onClick={handleDownloadTranscript}
+                onClick={handleCopyTranscript}
                 disabled={!transcriptText}
-                title="Download Transcript"
-                className="p-2.5 text-blue-600 bg-blue-100 rounded-md hover:bg-blue-200 focus:ring-4 focus:ring-blue-300 disabled:bg-gray-300 disabled:text-gray-400 transition-colors inline-flex items-center"
+                title="Copy Transcript"
+                className="p-2.5 text-purple-600 hover:text-purple-700 hover:bg-purple-50 focus:ring-4 focus:ring-purple-300 disabled:text-gray-400 transition-colors inline-flex items-center"
               >
-                <DownloadIcon />
+                <CopyIcon />
               </button>
+              {isCopySuccess && (
+                <div className="text-sm text-green-600 font-medium">
+                  ✓ Copied to clipboard!
+                </div>
+              )}
               <button 
                 onClick={() => setIsTranscriptModalOpen(false)} 
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors text-sm font-medium"
