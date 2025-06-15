@@ -155,7 +155,17 @@ export function Conversation({ onInterviewActiveChange, sessionId: providedSessi
     logClient('ElevenLabs SDK: onDisconnect - Voice agent disconnected.', reason || 'No specific reason provided by SDK.');
     setIsTimerRunning(false);
     if (onInterviewActiveChange) onInterviewActiveChange(false);
-  }, [onInterviewActiveChange]);
+    
+    // When the agent ends the call, redirect to processing page for scoring
+    const currentSessionId = sessionIdRef.current;
+    if (currentSessionId) {
+      logger.info({ event: 'AgentEndedConversation', details: { sessionId: currentSessionId, reason } });
+      
+      // Use provided sessionId if available, otherwise use the current sessionId
+      const sessionIdForRouting = providedSessionId || currentSessionId;
+      router.push(`/processing/${sessionIdForRouting}`);
+    }
+  }, [onInterviewActiveChange, router, providedSessionId]);
 
   const onMessage = useCallback((message: any) => {
     logClient('ElevenLabs SDK: onMessage - Received message.', message);
@@ -165,8 +175,16 @@ export function Conversation({ onInterviewActiveChange, sessionId: providedSessi
       const reason = interruptionEvent.interruption_event?.reason || "Unknown interruption";
       logClient(`ElevenLabs SDK: Interruption occurred - Reason: ${reason}, SessionId: ${currentSessionIdFromRef}`);
       setIsTimerRunning(false);
-      alert(`Session interrupted: ${reason}`);
       if (onInterviewActiveChange) onInterviewActiveChange(false);
+      
+      // Handle interruption - redirect to processing page if we have a session
+      if (currentSessionIdFromRef) {
+        logger.info({ event: 'ConversationInterrupted', details: { sessionId: currentSessionIdFromRef, reason } });
+        const sessionIdForRouting = providedSessionId || currentSessionIdFromRef;
+        router.push(`/processing/${sessionIdForRouting}`);
+      } else {
+        alert(`Session interrupted: ${reason}`);
+      }
       return;
     }
     if (message && message.message && typeof message.message === 'string') {
@@ -181,7 +199,7 @@ export function Conversation({ onInterviewActiveChange, sessionId: providedSessi
     } else {
       logClient('ElevenLabs SDK: onMessage - Received message without standard content or unknown type.', message);
     }
-  }, [saveTranscript, onInterviewActiveChange]);
+  }, [saveTranscript, onInterviewActiveChange, router, providedSessionId]);
 
   const onError = useCallback((error: any) => {
     logClient('ElevenLabs SDK: onError - An error occurred.', error);

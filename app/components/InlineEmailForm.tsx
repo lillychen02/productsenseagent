@@ -109,7 +109,7 @@ const InlineEmailForm = forwardRef<HTMLDivElement, InlineEmailFormProps>(({ onSu
                   setEmail(e.target.value);
                   if (error) setError(null);
                 }}
-                placeholder="Type your email..."
+                placeholder="Enter your email"
                 className={'w-full h-full px-4 py-3 bg-gray-100 text-gray-800 placeholder-gray-500 focus:outline-none'}
                 disabled={isSubmitting}
                 aria-label="Email address to save results"
